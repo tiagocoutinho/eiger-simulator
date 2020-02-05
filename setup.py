@@ -7,7 +7,7 @@ from setuptools import setup, find_packages
 
 TESTING = any(x in sys.argv for x in ["test", "pytest"])
 
-requirements = ['fastapi', 'uvicorn']
+requirements = ['fastapi', 'uvicorn', 'pyzmq>=17', 'click']
 
 setup_requirements = []
 if TESTING:
@@ -30,7 +30,7 @@ setup(
     description="ALBA Eiger simulator",
     entry_points={
         'console_scripts': [
-            'eigersim=eigersim:main',
+            'eiger-simulator=eigersim.web.server:main',
         ]
     },
     install_requires=requirements,
