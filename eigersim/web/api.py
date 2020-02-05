@@ -1,5 +1,7 @@
 import enum
 import json
+import asyncio
+import datetime
 import functools
 from typing import List
 
@@ -7,16 +9,80 @@ import fastapi
 import zmq.asyncio
 
 
-class Param(str, enum.Enum):
-    count_time = 'count_time'
-    frame_time = 'frame_time'
-    description = 'description'
-    detector_instance = 'detector_instance'
+class Version(str, enum.Enum):
+    v1_6_0 = '1.6.0'
 
 
-def Value(value, value_type='string', access_mode='rw', unit='', **kwargs):
-    return dict(value=value, value_type=value_type,
-                access_mode=access_mode, unit=unit, **kwargs)
+def utc():
+    return datetime.datetime.utcnow()
+
+
+def utc_str():
+    return utc().strftime("%Y-%m-%dT%H:%M:%S.%f")
+
+
+class Value:
+
+    def __init__(self, value, value_type='string', **kwargs):
+        kwargs['value'] = value
+        kwargs['value_type'] = value_type
+        self.__dict__['_pars'] = kwargs
+
+    def __getitem__(self, key):
+        val = self._pars[key]
+        return val() if callable(val) else val
+
+    def __setitem__(self, key, value):
+        self._pars[key] = value
+
+    def __getattr__(self, key):
+        return self[key]
+
+    def __setattr__(self, key, value):
+        self[key] = value
+
+    def __dir__(self):
+        return list(self._pars)
+
+    def __contains__(self, key):
+        return key in self._pars
+
+    def __len__(self):
+        return len(self._pars)
+
+    def __iter__(self):
+        return iter(self._pars)
+
+    def keys(self):
+        return self._pars.keys()
+
+    def values(self):
+        return self._pars.values()
+
+    def items(self):
+        return self._pars.values()
+
+    def get(self, key):
+        return self._pars.get(key)
+
+
+class Value(dict):
+
+    def __init__(self, value, value_type='string', **kwargs):
+        super().__init__()
+        kwargs['value'] = value
+        kwargs['value_type'] = value_type
+        self.update(kwargs)
+
+    def __getitem__(self, key):
+        val = super().__getitem__(key)
+        return val() if callable(val) else val
+
+    def __getattr__(self, key):
+        return self[key]
+
+    def __setattr__(self, key, value):
+        self[key] = value
 
 
 def Bool(value, access_mode='rw', **kwargs):
@@ -61,6 +127,14 @@ def LStrR(value, **kwargs):
     return LStr(value, access_mode='r', **kwargs)
 
 
+def LInt(value, access_mode='rw', **kwargs):
+    return Value(value, value_type='int[]', access_mode=access_mode, **kwargs)
+
+
+def LIntR(value, **kwargs):
+    return LInt(value, access_mode='r', **kwargs)
+
+
 class Detector:
 
     def __init__(self, zmq_bind='tcp://0:9999'):
@@ -71,23 +145,23 @@ class Detector:
 
         self.config = {
             'auto_summation': Bool(True),
-            'beam_center_x': Float(0.0, 0.0, 1e6),
-            'beam_center_y': Float(0.0, 0.0, 1e6),
+            'beam_center_x': Float(1533.81, 0.0, 1e6),
+            'beam_center_y': Float(1657.1, 0.0, 1e6),
             'bit_depth_image': IntR(16),
-            'bit_depth_readout': IntR(16),
+            'bit_depth_readout': IntR(12),
             'chi_increment': Float(0.0, -100, 100),
             'chi_start': Float(0.0, -180, 180),
-            'compression': Str('lz4', allowed_values=['lz4', 'bslz4']),
+            'compression': Str('bslz4', allowed_values=['lz4', 'bslz4']),
             'count_time': Float(0.5, 0.0000029, 1800, 's'),
             'countrate_correction_applied': Bool(True),
-            'countrate_correction_count_cutoff': IntR(0),
+            'countrate_correction_count_cutoff': IntR(12440),
             'data_collection_date': Str(''),
-            'description': StrR('Eiger9M'),
-            'detector_number': StrR('XT67793G1'),
-            'detector_distance': Float(1.0, min=0.0, max=1e6),
+            'description': StrR('Dectris Eiger 9M'),
+            'detector_number': StrR('E-18-0102'),
+            'detector_distance': Float(0.12696, min=0.0, max=1e6),
             'detector_readout_time': FloatR(1e-5, min=0, max=1e6),
             'element': Str('Cu'),
-            'flatfield': 'TODO',
+            'flatfield': Value([], 'float[][]'),
             'flatfield_correction_applied': Bool(True),
             'frame_time': Float(1.0, min=1/500, max=1e6, unit='s'),
             'kappa_increment': Float(0.0, -100, 100),
@@ -99,69 +173,130 @@ class Detector:
             'omega_start': Float(0.0, -180, 180),
             'phi_increment': Float(0.0, -100, 100),
             'phi_start': Float(0.0, -180, 180),
-            'photon_energy': Float(1.0, min=0, max=1_000_000, unit='eV'),
-            'pixel_mask': 'TODO',
+            'photon_energy': Float(12649.9, min=0, max=1_000_000, unit='eV'),
+            'pixel_mask': Value([], 'unit[][]'),
             'pixel_mask_applied': Bool(True),
             'roi_mode': Str(''),
-            'sensor_material': StrR('CdTe'),
-            'sensor_thickness': FloatR(0.001),
+            'sensor_material': StrR('Si'),
+            'sensor_thickness': FloatR(0.00045),
             'software_version': StrR('1.6.0'),
-            'threshold_energy': Float(1.0),
-            'trigger_mode': Str('software'),
+            'threshold_energy': Float(6324.95),
+            'trigger_mode': Str('ints', allowed_values=['ints', 'inte', 'exts', 'exte']),
             'two_theta_increment': Float(0.0, -100, 100),
             'two_theta_start': Float(0.0, -180, 180),
             'wavelength': Float(1.0),
-            'x_pixel_size': FloatR(0.002),
-            'y_pixel_size': FloatR(0.001),
-            'x_pixels_in_detector': IntR(3840),
-            'y_pixels_in_detector': IntR(2160),
+            'x_pixel_size': FloatR(7.5e-5),
+            'y_pixel_size': FloatR(7.5e-5),
+            'x_pixels_in_detector': IntR(3110),
+            'y_pixels_in_detector': IntR(3269),
         }
-        self.status = {}
+        self.status = {
+            'state': Value('na', value_type='string', time=utc_str(), state='normal'),
+            'error': Value([], value_type='string[]', time=utc_str(), state='normal'),
+            'time': Value(utc_str, value_type='date', time=utc_str(), state='normal'),
+            'board_000/th0_temp': Value(22.1, value_type='float', time=utc_str(), state='normal'),
+            'board_000/th0_humidity': Value(7.45, value_type='float', time=utc_str(), state='normal'),
+            'builder/dcu_buffer_free': Value(98.8, value_type='float', time=utc_str(), state='normal'),
+        }
+        self.monitor = {
+            'config': {
+                'mode': Bool(False),
+                'buffer_size': Int(10)
+            },
+            'status': {
+                'state': StrR('normal'),
+                'error': LStrR([]),
+                'buffer_fill_level': LIntR([0, 10]),
+                'dropped': IntR(0),
+                'next_image_number': IntR(0),
+                'monitor_image_number': IntR(0),
+            }
+        }
         self.stream = {
             'config': {
-                'mode': Str('enabled'),
-                'header_detail': Str('basic'),  # all, basic, none
+                'mode': Str('enabled', allowed_values=['enabled', 'disabled']),
+                'header_detail': Str('all', allowed_values=['all', 'basic', 'none']),
                 'header_appendix': Str(''),
                 'image_appendix': Str(''),
             },
             'status': {
                 'state': StrR('ready'),
                 'error': LStrR([]),
-                'dropped': IntR(0)
+                'dropped': IntR(0),
             }
         }
         self.system = {
             'status': {
             }
         }
+        self.filewriter = {
+            'config': {
+                'mode': Str('disabled', allowed_values=['enabled', 'disabled']),
+                'transfer_mode': Str('HTTP', allowed_values=['HTTP']),
+                'nimages_per_file': Int(1, min=0, max=1_000_000), # 0 means all in master HDF5
+                'image_nr_start' : Int(1),
+                'name_pattern': Str('series_$id'),
+                'compression_enabled': Bool(True),
+            }
+        }
         self.series = 0
+        self.acquisition = None
+
+    async def acquire(self, count_time=None):
+        print('start acquisition')
+        nb_frames = self.config['nimages']
+        frame_time = self.config['frame_time']
+        p1_base_header = dict(htype='dimage-1.0', series=self.series)
+        p2_base_header = dict(htype='dimaged-1.0', encoding='bs8-lz4<')
+        for frame_nb in range(nb_frames):
+            p2_header = dict(p2_base_header, size=())
+            p1_header = dict(p1_base_header, frame=frame_nb, hash='')
+            await asyncio.sleep(frame_time)
+            print(f'Done frame {frame_nb})')
+
+    async def initialize(self):
+        self.status['state']['value'] = 'initialize'
+        await asyncio.sleep(1)
+        self.status['state']['value'] = 'ready'
 
     async def arm(self):
-        now = datetime.datetime.utcnow()
         self.series += 1
         self.stream['status']['state']['value'] = 'armed'
         self.stream['status']['dropped']['value'] = 0
-        self.config['data_collection_date'] = now.strftime("%Y-%m-%d %H:%M:%S.%f")
-        if self.stream['config']['mode'] == 'enabled':
+        self.config['data_collection_date']['value'] = utc_str()
+        if self.stream['config']['mode']['value'] == 'enabled':
             await self.send_global_header_data(series=self.series)
+        return self.series
 
     async def disarm(self):
+        self.stream['status']['state']['value'] = 'ready'
         await self.send_end_of_series(self.series)
+        return self.series
 
     async def cancel(self):
+        self.stream['status']['state']['value'] = 'ready'
         await self.send_end_of_series(self.series)
+        return self.series
 
     async def abort(self):
+        self.stream['status']['state']['value'] = 'ready'
         await self.send_end_of_series(self.series)
+        return self.series
+
+    async def trigger(self, count_time=None):
+        self.acquisition = asyncio.create_task(self.acquire(count_time))
+
+    async def status_update(self):
+        raise NotImplementedError
 
     async def send_global_header_data(self, series):
-        detail = self.stream['config']['header_detail']
+        detail = self.stream['config']['header_detail']['value']
         header = dict(htype='dheader-1.0', series=series, header_detail=detail)
         parts = [
             json.dumps(header).encode()
         ]
         if detail in ('basic', 'all'):
-            config_header = dict(self.config)
+            config_header = {k: v['value'] for k, v in self.config.items()}
             pixel_mask = config_header.pop('pixel_mask')
             flatfield = config_header.pop('flatfield')
             parts.append(json.dumps(config_header).encode())
@@ -184,24 +319,46 @@ class Detector:
         header = dict(htype='dseries_end-1.0', series=series)
         await self.zmq_sock.send(json.dumps(header).encode())
 
+    async def monitor_clear(self):
+        raise NotImplementedError
+
+    async def monitor_initialize(self):
+        raise NotImplementedError
+
+    async def filewriter_clear(self):
+        raise NotImplementedError
+
+    async def filewriter_initialize(self):
+        raise NotImplementedError
+
+    async def stream_initialize(self):
+        raise NotImplementedError
+
+    async def system_restart(self):
+        raise NotImplementedError
+
 
 app = fastapi.FastAPI()
 
 
 # DETECTOR MODULE =============================================================
 
+@app.get('/detector/api/version/')
+def version():
+    return dict(value='1.6.0', value_type='string')
+
+
 # CONFIG task -----------------------------------------------------------------
 
 @app.get('/detector/api/{version}/config/{param}')
-def config(version: str, param: str):
-    assert version.startswith('1.6')
+def config(version: Version, param: str):
+    
     return app.detector.config[param]
 
 
 @app.put('/detector/api/{version}/config/{param}')
-def config_put(version: str, param: str, value: str = None) -> List[str]:
-    assert version.startswith('1.6')
-    app.detector.config[param]['value'] = value
+def config_put(version: Version, param: str, body=fastapi.Body(...)) -> List[str]:
+    app.detector.config[param]['value'] = body['value']
     return ["bit_depth_image", "count_time",
             "countrate_correction_count_cutoff",
             "frame_count_time", "frame_period", "nframes_sum"]
@@ -210,104 +367,178 @@ def config_put(version: str, param: str, value: str = None) -> List[str]:
 # STATUS task -----------------------------------------------------------------
 
 @app.get('/detector/api/{version}/status/{param}')
-def status(version: str, param: Param):
-    assert version.startswith('1.6')
+def status(version: Version, param: str):
     return app.detector.status[param]
+
+
+@app.get('/detector/api/{version}/status/board_000/{param}')
+def status_board(version: Version, param: str):
+    return app.detector.status['board_000/' + param]
 
 
 # COMMAND task ----------------------------------------------------------------
 
 @app.put('/detector/api/{version}/command/initialize')
-async def initialize(version: str):
-    assert version.startswith('1.6')
+async def initialize(version: Version):
+    return await app.detector.initialize()
 
 
 @app.put('/detector/api/{version}/command/arm')
-async def arm(version: str):
-    assert version.startswith('1.6')
-    await app.detector.arm()
+async def arm(version: Version):
+    return await app.detector.arm()
 
 
 @app.put('/detector/api/{version}/command/disarm')
-async def disarm(version: str):
-    assert version.startswith('1.6')
-    await app.detector.disarm()
+async def disarm(version: Version):
+    return await app.detector.disarm()
 
 
 @app.put('/detector/api/{version}/command/trigger')
-async def trigger(version: str):
-    assert version.startswith('1.6')
-    await app.detector.trigger()
+async def trigger(version: Version, count_time: float = None):
+    return await app.detector.trigger(count_time)
 
 
 @app.put('/detector/api/{version}/command/cancel')
-async def cancel(version: str):
-    assert version.startswith('1.6')
-    await app.detector.cancel()
+async def cancel(version: Version):
+    return await app.detector.cancel()
 
 
 @app.put('/detector/api/{version}/command/abort')
-async def abort(version: str):
-    assert version.startswith('1.6')
-    await app.detector.abort()
+async def abort(version: Version):
+    return await app.detector.abort()
 
 
 @app.put('/detector/api/{version}/command/status_update')
-def status_update(version: str):
-    assert version.startswith('1.6')
+async def status_update(version: Version):
+    return await app.detector.status_update()
+
+
+# MONITOR MODULE ==============================================================
+
+@app.get('/monitor/api/{version}/config/{param}')
+def monitor_config(version: Version, param: str):
+    return app.detector.monitor['config'][param]
+
+
+@app.put('/monitor/api/{version}/config/{param}')
+def monitor_config_put(version: Version, param: str, body=fastapi.Body(...)):
+    app.detector.monitor['config'][param]['value'] = body['value']
+
+
+@app.get('/monitor/api/{version}/images')
+def images(version: Version, param: str):
+    raise NotImplementedError
+
+
+@app.get('/monitor/api/{version}/images/{series}/{image}')
+def image(version: Version, series: int, image: int):
+    # Return image in TIFF format
+    raise NotImplementedError
+
+
+@app.get('/monitor/api/{version}/images/monitor')
+def last_image(version: Version):
+    # Return last image in TIFF format
+    raise NotImplementedError
+
+
+@app.get('/monitor/api/{version}/images/next')
+def consume_image(version: Version):
+    # Consume first image in TIFF format
+    raise NotImplementedError
+
+
+@app.get('/monitor/api/{version}/status/{param}')
+def consume_image(version: Version, param: str):
+    return app.detector.monitor['status'][param]
+
+
+@app.put('/monitor/api/{version}/command/clear')
+async def monitor_clear(version: Version):
+    await app.detector.monitor_clear()
+
+
+@app.put('/monitor/api/{version}/command/initialize')
+async def monitor_initialize(version: Version):
+    await app.detector.monitor_initialize()
 
 
 # FILE WRITER MODULE ==========================================================
 
-@app.get('/filewriter/api/{version}/{module}')
-def filewriter(version: str, module: str):
-    assert version.startswith('1.6')
+@app.get('/filewriter/api/{version}/config/{param}')
+def filewriter_config(version: Version, param: str):
+    return app.detector.filewriter['config'][param]
+
+
+@app.put('/filewriter/api/{version}/config/{param}')
+def filewriter_config_put(version: Version, param: str, body=fastapi.Body(...)):
+    app.detector.filewriter['config'][param]['value'] = body['value']
+
+
+@app.get('/filewriter/api/{version}/status/{param}')
+def filewriter_config(version: Version, param: str):
+    return app.detector.filewriter['status'][param]
+
+
+@app.get('/filewriter/api/{version}/files')
+def file_list(version: Version):
+    raise NotImplementedError
+
+
+@app.put('/filewriter/api/{version}/command/clear')
+async def filewriter_clear(version: Version):
+    return await app.detector.filewriter_clear()
+
+
+@app.put('/filewriter/api/{version}/command/initialize')
+async def filewriter_initialize(version: Version):
+    return await app.detector.filewriter_initialize()
+
+
+# DATA MODULE =================================================================
+
+@app.get('/data/{pattern}_master.h5')
+def master_file(version: Version, pattern: str):
+    raise NotImplementedError
+
+
+@app.get('/data/{pattern}_data_{file_nb}.h5')
+def data_file(version: Version, pattern: str, file_nb: int):
+    raise NotImplementedError
+
 
 
 # STREAM MODULE ===============================================================
 
 @app.get('/stream/api/{version}/status/{param}')
-def stream_status(version: str, param: str):
-    assert version.startswith('1.6')
+def stream_status(version: Version, param: str):
     return app.detector.stream['status'][param]
 
 
 @app.get('/stream/api/{version}/config/{param}')
-def stream_config(version: str, param: str):
-    assert version.startswith('1.6')
+def stream_config(version: Version, param: str):
     return app.detector.stream['config'][param]
 
 
 @app.put('/stream/api/{version}/config/{param}')
-def stream_config_put(version: str, param: str, value):
-    assert version.startswith('1.6')
-    app.detector.stream['config'][param]['value'] = value
+def stream_config_put(version: Version, param: str, body=fastapi.Body(...)):
+    app.detector.stream['config'][param]['value'] = body['value']
 
 
 @app.put('/stream/api/{version}/command/initialize')
-def stream_initialize(version: str):
-    assert version.startswith('1.6')
-    raise NotImplementedError
-
-
-# MONITOR MODULE ==============================================================
-
-@app.get('/monitor/api/{version}/')
-def monitor(version: str):
-    assert version.startswith('1.6')
-    pass
+async def stream_initialize(version: Version):
+    await app.detector.stream_initialize()
 
 
 # SYSTEM MODULE ===============================================================
 
 @app.get('/system/api/{version}/status/{param}')
-def system_status(version: str, param: str):
-    assert version.startswith('1.6')
+def system_status(version: Version, param: str):
     return app.detector.system['status'][param]
 
 
-@app.get('/system/api/{version}/command/restart')
-def system_restart(version: str):
-    assert version.startswith('1.6')
+@app.put('/system/api/{version}/command/restart')
+async def system_restart(version: Version):
+    return await app.detector.system_restart()
 
 
