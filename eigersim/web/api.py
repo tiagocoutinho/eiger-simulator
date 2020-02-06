@@ -278,6 +278,7 @@ class Detector:
             p2 = dict(p2_base, size=frame.size, encoding=encoding)
             p1 = dict(p1_base, frame=frame_nb, hash='')
             p3 = frame.data
+            parts = [json.dumps(p1).encode(), json.dumps(p2).encode(), p3]
             now = time.time()
             next_time = start + (frame_nb + 1) * frame_time
             sleep_time = next_time - now
@@ -291,13 +292,9 @@ class Detector:
             stop_time = time.time() - start
             p4['stop_time'] = int(stop_time*1e9)
             p4['real_time'] = int((stop_time - start_time)*1e9)
-            parts = [json.dumps(p1).encode(),
-                     json.dumps(p2).encode(),
-                     p3,
-                     json.dumps(p4).encode()]
+            parts.append(json.dumps(p4).encode())
             await self.zmq.send(*parts)
             log.info(f'[ END ] frame {frame_nb}')
-        await self.send_end_of_series(self.series)
 
     async def initialize(self):
         log.info('[START] initialize')
@@ -332,20 +329,18 @@ class Detector:
         return self.series
 
     async def disarm(self):
-        self.stream['status']['state']['value'] = 'ready'
-        await self.send_end_of_series(self.series)
+        if self.acquisition:
+            self.acquisition.cancel()
         return self.series
 
     async def cancel(self):
-        self.stream['status']['state']['value'] = 'ready'
         if self.acquisition:
             self.acquisition.cancel()
-        await self.send_end_of_series(self.series)
         return self.series
 
     async def abort(self):
-        self.stream['status']['state']['value'] = 'ready'
-        await self.send_end_of_series(self.series)
+        if self.acquisition:
+            self.acquisition.cancel()
         return self.series
 
     async def trigger(self, count_time=None):
@@ -355,13 +350,18 @@ class Detector:
         self.acquisition.add_done_callback(self._on_acquisition_finished)
 
     def _on_acquisition_finished(self, task):
+        self.stream['status']['state']['value'] = 'ready'
         self.acquisition = None
-        print('acquisition finished')
-        err = task.exception()
-        if err:
-            print(f'acquisition error {err!r}')
+        if task.cancelled():
+            log.warning('acquisition canceled')
+            asyncio.create_task(self.send_end_of_series(self.series))
         else:
-            print(f'acquisition done {task.result()}')
+            err = task.exception()
+            if err:
+                log.error(f'acquisition error {err!r}')
+            else:
+                log.info('acquisition done')
+                asyncio.create_task(self.send_end_of_series(self.series))
 
     async def status_update(self):
         raise NotImplementedError
