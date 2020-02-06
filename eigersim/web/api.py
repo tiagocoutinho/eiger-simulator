@@ -1,12 +1,20 @@
 import enum
 import json
+import time
 import asyncio
+import logging
 import datetime
 import functools
+
 from typing import List
 
 import fastapi
 import zmq.asyncio
+
+from ..dataset import frames_iter
+
+
+log = logging.getLogger('eigersim.web')
 
 
 class Version(str, enum.Enum):
@@ -19,51 +27,6 @@ def utc():
 
 def utc_str():
     return utc().strftime("%Y-%m-%dT%H:%M:%S.%f")
-
-
-class Value:
-
-    def __init__(self, value, value_type='string', **kwargs):
-        kwargs['value'] = value
-        kwargs['value_type'] = value_type
-        self.__dict__['_pars'] = kwargs
-
-    def __getitem__(self, key):
-        val = self._pars[key]
-        return val() if callable(val) else val
-
-    def __setitem__(self, key, value):
-        self._pars[key] = value
-
-    def __getattr__(self, key):
-        return self[key]
-
-    def __setattr__(self, key, value):
-        self[key] = value
-
-    def __dir__(self):
-        return list(self._pars)
-
-    def __contains__(self, key):
-        return key in self._pars
-
-    def __len__(self):
-        return len(self._pars)
-
-    def __iter__(self):
-        return iter(self._pars)
-
-    def keys(self):
-        return self._pars.keys()
-
-    def values(self):
-        return self._pars.values()
-
-    def items(self):
-        return self._pars.values()
-
-    def get(self, key):
-        return self._pars.get(key)
 
 
 class Value(dict):
@@ -137,7 +100,9 @@ def LIntR(value, **kwargs):
 
 class Detector:
 
-    def __init__(self, zmq_bind='tcp://0:9999'):
+    def __init__(self, zmq_bind='tcp://0:9999', dataset=None, max_memory=1_000_000_000):
+        self.dataset = dataset
+        self.max_memory = max_memory
         self.zmq_bind = zmq_bind
         self.zmq_context = zmq.asyncio.Context()
         self.zmq_sock = self.zmq_context.socket(zmq.PUSH)
@@ -166,7 +131,7 @@ class Detector:
             'frame_time': Float(1.0, min=1/500, max=1e6, unit='s'),
             'kappa_increment': Float(0.0, -100, 100),
             'kappa_start': Float(0.0, -180, 180),
-            'nimages': Int(1, min=1, max=1_000_000),
+            'nimages': Int(10, min=1, max=1_000_000),
             'ntrigger': Int(1, min=1, max=1_000_000),
             'number_of_excluded_pixels': IntR(0),
             'omega_increment': Float(0.0, -100, 100),
@@ -243,20 +208,64 @@ class Detector:
         self.acquisition = None
 
     async def acquire(self, count_time=None):
-        print('start acquisition')
-        nb_frames = self.config['nimages']
-        frame_time = self.config['frame_time']
-        p1_base_header = dict(htype='dimage-1.0', series=self.series)
-        p2_base_header = dict(htype='dimaged-1.0', encoding='bs8-lz4<')
+        nb_frames = self.config['nimages']['value']
+        log.info(f'start acquisition {nb_frames}')
+        frame_time = self.config['frame_time']['value']
+        frames = self.frames
+        p1_base = dict(htype='dimage-1.0', series=self.series)
+        p2_base = dict(htype='dimaged-1.0', shape=frames[0][0].shape,
+                              type='uint16') # TODO: ensure data type is correct
+        p4_base = dict(htype='dconfig-1.0')
+        start = time.time()
         for frame_nb in range(nb_frames):
-            p2_header = dict(p2_base_header, size=())
-            p1_header = dict(p1_base_header, frame=frame_nb, hash='')
-            await asyncio.sleep(frame_time)
-            print(f'Done frame {frame_nb})')
+            log.info(f'[START] frame {frame_nb}')
+            frame, encoding = frames[frame_nb]
+            p2 = dict(p2_base, size=frame.size, encoding=encoding)
+            p1 = dict(p1_base, frame=frame_nb, hash='')
+            p3 = frame.data
+            now = time.time()
+            next_time = start + (frame_nb + 1) * frame_time
+            sleep_time = next_time - now
+            start_time = now - start
+            p4 = dict(p4_base, start_time=int(start_time*1e9))
+            log.info(f'sleep for {sleep_time}s')
+            if sleep_time > 0:
+                await asyncio.sleep(sleep_time)
+            else:
+                log.error(f'overrun at frame {frame_nb}!')
+            stop_time = time.time() - start
+            p4['stop_time'] = int(stop_time*1e9)
+            p4['real_time'] = int((stop_time - start_time)*1e9)
+            parts = [json.dumps(p1).encode(),
+                     json.dumps(p2).encode(),
+                     p3,
+                     json.dumps(p4).encode()]
+
+            await self.zmq_sock.send_multipart(parts)
+            log.info(f'[ END ] frame {frame_nb}')
+
+    async def __dummy_loop(self, count_time=None):
+        nb_frames = self.config['nimages']['value']
+        print(f'start fake {nb_frames}')
+        for i in range(nb_frames):
+            await asyncio.sleep(0.1)
+            print(i)
 
     async def initialize(self):
         self.status['state']['value'] = 'initialize'
-        await asyncio.sleep(1)
+        if self.dataset is None:
+            raise NotImplementedError
+        else:
+            total_size = 0
+            frames = []
+            for frame in frames_iter(self.dataset):
+                total_size += frame.size
+                frame = frame, f'bs{frame.dtype.itemsize * 8}-lz4<'
+                frames.append(frame)
+                if total_size > self.max_memory:
+                    break
+            self.frames = frames
+            print(f'Stored {len(frames)} frames')
         self.status['state']['value'] = 'ready'
 
     async def arm(self):
@@ -275,6 +284,8 @@ class Detector:
 
     async def cancel(self):
         self.stream['status']['state']['value'] = 'ready'
+        if self.acquisition:
+            self.acquisition.cancel()
         await self.send_end_of_series(self.series)
         return self.series
 
@@ -284,7 +295,19 @@ class Detector:
         return self.series
 
     async def trigger(self, count_time=None):
+        if self.acquisition:
+            raise RuntimeError('Acquisition already in progress')
         self.acquisition = asyncio.create_task(self.acquire(count_time))
+        self.acquisition.add_done_callback(self._on_acquisition_finished)
+
+    def _on_acquisition_finished(self, task):
+        self.acquisition = None
+        print('acquisition finished')
+        err = task.exception()
+        if err:
+            print(f'acquisition error {err!r}')
+        else:
+            print(f'acquisition done {task.result()}')
 
     async def status_update(self):
         raise NotImplementedError
@@ -352,7 +375,7 @@ def version():
 
 @app.get('/detector/api/{version}/config/{param}')
 def config(version: Version, param: str):
-    
+
     return app.detector.config[param]
 
 
@@ -540,5 +563,3 @@ def system_status(version: Version, param: str):
 @app.put('/system/api/{version}/command/restart')
 async def system_restart(version: Version):
     return await app.detector.system_restart()
-
-
