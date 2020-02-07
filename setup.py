@@ -14,6 +14,7 @@ if TESTING:
     setup_requirements += ['pytest-runner']
 test_requirements = ['pytest', 'pytest-cov']
 extras_requirements = {
+    'client' : ['requests']
 }
 
 setup(
