@@ -1,5 +1,8 @@
 # Eiger simulator
 
+![Pypi python versions][pypi]
+![Pypi version][pypi-version]
+
 Dectris Eiger detector simulator.
 
 For now simulates Eiger 9M at full ROI in internal trigger single mode (ints).
@@ -8,7 +11,7 @@ Complete HTTP REST API + ZMQ data stream.
 
 ## Installation
 
-From within your favourite python environment:
+From within your favorite python environment:
 
 ```bash
 $ pip install -e eiger-simulator
@@ -84,3 +87,6 @@ For reference, here is a simple client that listens to the ZMQ stream:
       size = sum(len(i) for i in data)
       print(f'packet #parts={len(data)} size={size/1000} KB')
 ```
+
+[pypi]: https://img.shields.io/pypi/pyversions/eiger-simulator.svg
+[pypi-version]: https://img.shields.io/pypi/v/eiger-simulator.svg
