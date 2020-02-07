@@ -17,6 +17,9 @@ extras_requirements = {
     'client' : ['requests']
 }
 
+with open('README.md') as f:
+    description = f.read()
+
 setup(
     author="ALBA controls team",
     author_email='controls@cells.es',
@@ -36,7 +39,8 @@ setup(
     },
     install_requires=requirements,
     license="GPL",
-    long_description="Software package for ALBA's Eiger simulator",
+    long_description=description,
+    long_description_content_type='text/markdown',
     include_package_data=True,
     keywords='alba, dectris, eiger, simulator',
     name='eiger-simulator',
