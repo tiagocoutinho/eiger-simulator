@@ -5,6 +5,7 @@ import asyncio
 import logging
 import datetime
 import functools
+import itertools
 
 from typing import List
 
@@ -117,15 +118,15 @@ class Detector:
         log.info(f'[START] acquisition #{self.series}')
         nb_frames = self.config['nimages']['value']
         frame_time = self.config['frame_time']['value']
-        frames = self.frames
+        frames = itertools.cycle(self.frames)
         p1_base = dict(htype='dimage-1.0', series=self.series)
-        p2_base = dict(htype='dimaged-1.0', shape=frames[0][0].shape,
+        p2_base = dict(htype='dimaged-1.0', shape=self.frames[0][0].shape,
                               type='uint16') # TODO: ensure data type is correct
         p4_base = dict(htype='dconfig-1.0')
         start = time.time()
         for frame_nb in range(nb_frames):
             log.debug(f'  [START] frame {frame_nb}')
-            frame, encoding = frames[frame_nb]
+            frame, encoding = next(frames)
             p2 = dict(p2_base, size=frame.size, encoding=encoding)
             p1 = dict(p1_base, frame=frame_nb, hash='')
             p3 = frame.data
