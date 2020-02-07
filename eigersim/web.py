@@ -40,7 +40,7 @@ class Queue(asyncio.Queue):
 
 class ZMQChannel:
 
-    def __init__(self, address='tcp://0:9999', context=None, timeout=0.1,
+    def __init__(self, address='tcp://*:9999', context=None, timeout=0.1,
                  queue_maxsize=10000):
         self.address = address
         self.context = context or zmq.asyncio.Context()
@@ -59,7 +59,7 @@ class ZMQChannel:
         async for parts in queue:
             try:
                 if len(parts) > 1:
-                    await sock.send_multipart(parts)
+                    await sock.send_multipart(parts, copy=False)
                 else:
                     await sock.send(parts[0])
             except zmq.ZMQError as err:

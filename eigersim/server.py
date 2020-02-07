@@ -25,7 +25,7 @@ from .web import app, Detector
 @click.option(
     "--zmq",
     type=str,
-    default="tcp://0:9999",
+    default="tcp://*:9999",
     help="Bind ZMQ socket",
     show_default=True,
 )
