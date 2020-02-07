@@ -200,11 +200,12 @@ class Detector:
             self.acquisition.cancel()
         return self.series
 
-    async def trigger(self, count_time=None):
+    def trigger(self, count_time=None):
         if self.acquisition:
             raise RuntimeError('Acquisition already in progress')
         self.acquisition = asyncio.create_task(self.acquire(count_time))
         self.acquisition.add_done_callback(self._on_acquisition_finished)
+        return self.acquisition
 
     def _on_acquisition_finished(self, task):
         self.stream['status']['state']['value'] = 'ready'
@@ -329,7 +330,7 @@ async def disarm(version: Version):
 
 @app.put('/detector/api/{version}/command/trigger')
 async def trigger(version: Version, count_time: float = None):
-    return await app.detector.trigger(count_time)
+    await app.detector.trigger(count_time)
 
 
 @app.put('/detector/api/{version}/command/cancel')
