@@ -4,7 +4,7 @@ import logging
 import click
 import uvicorn
 
-from .api import app, Detector
+from .web import app, Detector
 
 
 @click.command()

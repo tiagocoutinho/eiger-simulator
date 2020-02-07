@@ -2,11 +2,14 @@ import json
 
 import requests
 
+from . import config
+
 
 class Param:
 
-    def __init__(self, addr):
+    def __init__(self, addr, name):
         self.base_addr = addr
+        self.addr = f'{addr}/{name}'
 
     def __set_name__(self, eiger, name):
         self.addr = f'{self.base_addr}/{name}'
@@ -18,25 +21,57 @@ class Param:
         eiger.put_value(self.addr.format(eiger=eiger), value)
 
 
-def build_param_type(addr):
+def ParamType(addr):
     class Par(Param):
-        def __init__(self):
-            super().__init__(addr)
+        def __init__(self, name):
+            super().__init__(addr, name)
     return Par
 
 
-DetectorConfigProperty = build_param_type('detector/api/{eiger.version}/config')
+DetectorConfigProperty = ParamType('detector/api/{eiger.version}/config')
+DetectorStatusProperty = ParamType('detector/api/{eiger.version}/status')
+MonitorConfigProperty = ParamType('monitor/api/{eiger.version}/config')
+MonitorStatusProperty = ParamType('monitor/api/{eiger.version}/status')
+StreamConfigProperty = ParamType('stream/api/{eiger.version}/config')
+StreamStatusProperty = ParamType('stream/api/{eiger.version}/status')
+SystemStatusProperty = ParamType('system/api/{eiger.version}/status')
+FileWriterConfigProperty = ParamType('filewriter/api/{eiger.version}/config')
+
+
+class BaseModule:
+    def __init__(self, eiger):
+        self._eiger = eiger
+    def __getattr__(self, name):
+        return getattr(self._eiger, name)
+
+
+def Module(*class_configs, Mod=None):
+    if Mod is None:
+        class Mod(BaseModule):
+            pass
+    for klass, config in zip(class_configs[::2], class_configs[1::2]):
+        for name in config:
+            setattr(Mod, name, klass(name))
+    return Mod
 
 
 class Eiger:
 
+    Monitor = Module(MonitorConfigProperty, config.GEN_MONITOR_CONFIG,
+                     MonitorStatusProperty, config.GEN_MONITOR_STATUS)
+    Stream = Module(StreamConfigProperty, config.GEN_STREAM_CONFIG,
+                    StreamStatusProperty, config.GEN_STREAM_STATUS)
+    System = Module(SystemStatusProperty, config.GEN_SYSTEM_STATUS)
+    FileWriter = Module(FileWriterConfigProperty, config.GEN_FILEWRITER_CONFIG)
+
     def __init__(self, address, zmq=None):
+        self._version = None
         self.address = address
         self.session = requests.Session()
-        self._version = None
-
-    nimages = DetectorConfigProperty()
-    frame_time = DetectorConfigProperty()
+        self.monitor = self.Monitor(self)
+        self.stream = self.Stream(self)
+        self.system = self.System(self)
+        self.filewriter = self.FileWriter(self)
 
     @property
     def version(self):
@@ -82,4 +117,12 @@ class Eiger:
 
     def abort(self):
         return self.detector_command('abort')
+
+    def __repr__(self):
+        return f'Eiger({self.address})'
+
+# Export detector properties (nimages, frame_time, etc) directly
+# in the Eiger object instead of a detector element
+Module(DetectorConfigProperty, config.GEN_DETECTOR_CONFIG,
+       DetectorStatusProperty, config.GEN_DETECTOR_STATUS, Mod=Eiger)
 
