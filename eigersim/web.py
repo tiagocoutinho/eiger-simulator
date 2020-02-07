@@ -44,21 +44,19 @@ class ZMQChannel:
                  queue_maxsize=10000):
         self.address = address
         self.context = context or zmq.asyncio.Context()
-        self.sock = self.context.socket(zmq.PUSH)
+        self.sock = None
+        self.task = None
         if timeout in (None, 0):
             timeout = 0
         else:
             timeout = -1 if timeout < 0 else int(timeout * 1000)
-        self.sock.sndtimeo = timeout
-        self.sock.bind(self.address)
+        self.timeout = timeout
         self.queue = Queue(queue_maxsize)
-        self.task = None
 
     async def loop(self):
         queue = self.queue
         sock = self.sock
         async for parts in queue:
-            log.info(f'send {len(parts)}')
             try:
                 if len(parts) > 1:
                     await sock.send_multipart(parts)
@@ -69,15 +67,24 @@ class ZMQChannel:
                 log.info(f'Error send ZMQ: {err!r}. Flushed {flushed} messages')
             queue.task_done()
 
-    def initialize(self):
+    async def initialize(self):
+        self.close()
+        self.sock = self.context.socket(zmq.PUSH)
+        self.sock.sndtimeo = self.timeout
+        self.sock.bind(self.address)
         self.task = asyncio.create_task(self.loop())
-        self.task.add_done_callback(self.on_task_finished)
-
-    def on_task_finished(self, task):
-        print(task.result())
 
     async def send(self, *parts):
         await self.queue.put(parts)
+
+    def close(self):
+        if self.task:
+            self.task.cancel()
+            self.task = None
+        if self.sock:
+            log.warn('closing')
+            self.sock.close()
+            self.sock = None
 
 
 class Detector:
@@ -107,8 +114,8 @@ class Detector:
         self.acquisition = None
 
     async def acquire(self, count_time=None):
+        log.info(f'[START] acquisition #{self.series}')
         nb_frames = self.config['nimages']['value']
-        log.info(f'start acquisition {nb_frames}')
         frame_time = self.config['frame_time']['value']
         frames = self.frames
         p1_base = dict(htype='dimage-1.0', series=self.series)
@@ -117,7 +124,7 @@ class Detector:
         p4_base = dict(htype='dconfig-1.0')
         start = time.time()
         for frame_nb in range(nb_frames):
-            log.info(f'[START] frame {frame_nb}')
+            log.debug(f'  [START] frame {frame_nb}')
             frame, encoding = frames[frame_nb]
             p2 = dict(p2_base, size=frame.size, encoding=encoding)
             p1 = dict(p1_base, frame=frame_nb, hash='')
@@ -128,7 +135,6 @@ class Detector:
             sleep_time = next_time - now
             start_time = now - start
             p4 = dict(p4_base, start_time=int(start_time*1e9))
-            log.info(f'sleep for {sleep_time}s')
             if sleep_time > 0:
                 await asyncio.sleep(sleep_time)
             else:
@@ -138,7 +144,8 @@ class Detector:
             p4['real_time'] = int((stop_time - start_time)*1e9)
             parts.append(json.dumps(p4).encode())
             await self.zmq.send(*parts)
-            log.info(f'[ END ] frame {frame_nb}')
+            log.debug(f'  [ END ] frame {frame_nb}')
+        log.info(f'[ END ] acquisition')
 
     def _build_dataset(self):
         if self.dataset is None:
@@ -161,8 +168,10 @@ class Detector:
         log.info('  [ END ] initialize: build dataset')
         self.status['state']['value'] = 'initialize'
         log.info('  [START] initialize: ZMQ')
+        if self.zmq:
+            self.zmq.close()
         self.zmq = ZMQChannel(self.zmq_bind)
-        self.zmq.initialize()
+        await self.zmq.initialize()
         log.info('  [ END ] initialize: ZMQ')
         self.status['state']['value'] = 'ready'
         log.info('[ END ] initialize')
