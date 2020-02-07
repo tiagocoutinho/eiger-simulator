@@ -30,7 +30,7 @@ setup(
     description="ALBA Eiger simulator",
     entry_points={
         'console_scripts': [
-            'eiger-simulator=eigersim.web.server:main',
+            'eiger-simulator=eigersim.server:main',
         ]
     },
     install_requires=requirements,
@@ -38,7 +38,7 @@ setup(
     long_description="Software package for ALBA's Eiger simulator",
     include_package_data=True,
     keywords='alba, dectris, eiger, simulator',
-    name='eigersim',
+    name='eiger-simulator',
     packages=find_packages(),
     package_data={},
     setup_requires=setup_requirements,
