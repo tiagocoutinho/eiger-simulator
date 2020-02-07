@@ -310,12 +310,12 @@ async def initialize(version: Version):
 
 @app.put('/detector/api/{version}/command/arm')
 async def arm(version: Version):
-    return await app.detector.arm()
+    return {'sequence id': await app.detector.arm()}
 
 
 @app.put('/detector/api/{version}/command/disarm')
 async def disarm(version: Version):
-    return await app.detector.disarm()
+    return {'sequence id': await app.detector.disarm()}
 
 
 @app.put('/detector/api/{version}/command/trigger')
@@ -325,12 +325,12 @@ async def trigger(version: Version, count_time: float = None):
 
 @app.put('/detector/api/{version}/command/cancel')
 async def cancel(version: Version):
-    return await app.detector.cancel()
+    return {'sequence id': await app.detector.cancel()}
 
 
 @app.put('/detector/api/{version}/command/abort')
 async def abort(version: Version):
-    return await app.detector.abort()
+    return {'sequence id': await app.detector.abort()}
 
 
 @app.put('/detector/api/{version}/command/status_update')
