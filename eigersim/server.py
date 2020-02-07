@@ -56,3 +56,7 @@ def main(host: str, port: int, zmq: str, dataset: click.Path, max_memory: int, l
     detector = Detector(zmq_bind=zmq, dataset=dataset, max_memory=max_memory)
     app.detector = detector
     uvicorn.run(app, host=host, port=port)
+
+
+if __name__ == '__main__':
+    main()

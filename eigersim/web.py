@@ -1,11 +1,9 @@
 import enum
 import json
-import time
 import asyncio
 import logging
 import datetime
 import functools
-import itertools
 
 from typing import List
 
@@ -15,6 +13,7 @@ import zmq.asyncio
 from . import config
 from .dataset import frames_iter
 from .tool import utc, utc_str
+from .acquisition import acquire
 
 
 log = logging.getLogger('eigersim.web')
@@ -115,38 +114,9 @@ class Detector:
         self.acquisition = None
 
     async def acquire(self, count_time=None):
-        log.info(f'[START] acquisition #{self.series}')
+        count_time = self.config['count_time']['value'] if count_time is None else count_time
         nb_frames = self.config['nimages']['value']
-        frame_time = self.config['frame_time']['value']
-        frames = itertools.cycle(self.frames)
-        p1_base = dict(htype='dimage-1.0', series=self.series)
-        p2_base = dict(htype='dimaged-1.0', shape=self.frames[0][0].shape,
-                              type='uint16') # TODO: ensure data type is correct
-        p4_base = dict(htype='dconfig-1.0')
-        start = time.time()
-        for frame_nb in range(nb_frames):
-            log.debug(f'  [START] frame {frame_nb}')
-            frame, encoding = next(frames)
-            p2 = dict(p2_base, size=frame.size, encoding=encoding)
-            p1 = dict(p1_base, frame=frame_nb, hash='')
-            p3 = frame.data
-            parts = [json.dumps(p1).encode(), json.dumps(p2).encode(), p3]
-            now = time.time()
-            next_time = start + (frame_nb + 1) * frame_time
-            sleep_time = next_time - now
-            start_time = now - start
-            p4 = dict(p4_base, start_time=int(start_time*1e9))
-            if sleep_time > 0:
-                await asyncio.sleep(sleep_time)
-            else:
-                log.error(f'overrun at frame {frame_nb}!')
-            stop_time = time.time() - start
-            p4['stop_time'] = int(stop_time*1e9)
-            p4['real_time'] = int((stop_time - start_time)*1e9)
-            parts.append(json.dumps(p4).encode())
-            await self.zmq.send(*parts)
-            log.debug(f'  [ END ] frame {frame_nb}')
-        log.info(f'[ END ] acquisition')
+        return await acquire(count_time, nb_frames, self.series, self.frames, self.zmq)
 
     def _build_dataset(self):
         if self.dataset is None:
