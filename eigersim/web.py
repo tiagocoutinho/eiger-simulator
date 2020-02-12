@@ -61,7 +61,7 @@ class ZMQChannel:
                 if len(parts) > 1:
                     await sock.send_multipart(parts, copy=False)
                 else:
-                    await sock.send(parts[0])
+                    await sock.send(parts[0], copy=False)
             except zmq.ZMQError as err:
                 flushed = queue.flush()
                 log.info(f'Error send ZMQ: {err!r}. Flushed {flushed} messages')
@@ -126,8 +126,7 @@ class Detector:
             frames = []
             for frame in frames_iter(self.dataset):
                 total_size += frame.nbytes
-                frame = frame, f'bs{frame.dtype.itemsize * 8}-lz4<'
-                frames.append(frame)
+                frames.append((zmq.Frame(frame), frame, f'bs{frame.dtype.itemsize * 8}-lz4<'))
                 if total_size > self.max_memory:
                     break
             self.frames = frames

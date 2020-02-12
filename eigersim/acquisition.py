@@ -4,12 +4,14 @@ import asyncio
 import logging
 import itertools
 
+import zmq
+
 log = logging.getLogger('eigersim.acquisition')
 
 
 async def acquire(count_time, nb_frames, series, dataset, zmq_channel):
     log.info(f'[START] acquisition #{series}')
-    f0, encoding = dataset[0]
+    _, f0, encoding = dataset[0]
     p1_base = dict(htype='dimage-1.0', series=series)
     p2_base = dict(htype='dimaged-1.0', shape=f0.shape, size=f0.size,
                    encoding=encoding, type='uint16') # TODO: ensure data type is correct
@@ -17,10 +19,10 @@ async def acquire(count_time, nb_frames, series, dataset, zmq_channel):
 
     frames = itertools.cycle(dataset)
     p2s = (dict(p2_base) for i in range(nb_frames))
-    p2s = [json.dumps(p).encode() for p in p2s]
+    p2s = [zmq.Frame(json.dumps(p).encode()) for p in p2s]
     p1s = (dict(p1_base, frame=i, hash='') for i in range(nb_frames))
-    p1s = [json.dumps(p).encode() for p in p1s]
-    p3s = [frame.data for i, (frame, _) in zip(range(nb_frames), frames)]
+    p1s = [zmq.Frame(json.dumps(p).encode()) for p in p1s]
+    p3s = [frame for i, (frame, _, _) in zip(range(nb_frames), frames)]
     p4s = []
     start = time.time()
     for frame_nb in range(nb_frames):
@@ -29,7 +31,7 @@ async def acquire(count_time, nb_frames, series, dataset, zmq_channel):
         real_nano = stop_nano - start_nano
         p4 = dict(p4_base, start_time=start_nano, stop_time=stop_nano,
                   real_time=real_nano)
-        p4 = json.dumps(p4).encode()
+        p4 = zmq.Frame(json.dumps(p4).encode())
         p4s.append(p4)
     parts = [(p1, p2, p3, p4) for p1, p2, p3, p4 in zip(p1s, p2s, p3s, p4s)]
     start = time.time()
