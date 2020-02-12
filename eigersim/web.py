@@ -116,7 +116,8 @@ class Detector:
     async def acquire(self, count_time=None):
         count_time = self.config['count_time']['value'] if count_time is None else count_time
         nb_frames = self.config['nimages']['value']
-        return await acquire(count_time, nb_frames, self.series, self.frames, self.zmq)
+        zmq = self.zmq if self.stream_enabled else None
+        return await acquire(count_time, nb_frames, self.series, self.frames, zmq)
 
     def _build_dataset(self):
         if self.dataset is None:
@@ -194,8 +195,14 @@ class Detector:
     async def status_update(self):
         raise NotImplementedError
 
+    @property
+    def stream_enabled(self):
+        return self.stream['config']['mode']['value'] == 'enabled'
+
     async def send_global_header_data(self, series):
-        detail = self.stream['config']['header_detail']['value']
+        if not self.stream_enabled:
+            return
+        detail = stream_config['header_detail']['value']
         header = dict(htype='dheader-1.0', series=series, header_detail=detail)
         parts = [
             json.dumps(header).encode()
@@ -221,6 +228,8 @@ class Detector:
         await self.zmq.send(*parts)
 
     async def send_end_of_series(self, series):
+        if not self.stream_enabled:
+            return
         header = dict(htype='dseries_end-1.0', series=series)
         await self.zmq.send(json.dumps(header).encode())
 

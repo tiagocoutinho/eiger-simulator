@@ -45,6 +45,8 @@ async def acquire(count_time, nb_frames, series, dataset, zmq_channel):
             await asyncio.sleep(sleep_time)
         else:
             log.error(f'overrun at frame {frame_nb}!')
+        if zmq_channel:
+            await zmq_channel.send(*frame_parts)
         await zmq_channel.send(*frame_parts)
         log.debug(f'  [ END ] frame {frame_nb}')
     log.info(f'[ END ] acquisition')
