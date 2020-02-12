@@ -34,11 +34,11 @@ async def acquire(count_time, nb_frames, series, dataset, zmq_channel):
         p4 = zmq.Frame(json.dumps(p4).encode())
         p4s.append(p4)
     parts = [(p1, p2, p3, p4) for p1, p2, p3, p4 in zip(p1s, p2s, p3s, p4s)]
-    start = time.time()
+    start = time.monotonic()
     for frame_nb in range(nb_frames):
         log.debug(f'  [START] frame {frame_nb}')
         frame_parts = parts[frame_nb]
-        now = time.time()
+        now = time.monotonic()
         next_time = start + (frame_nb + 1) * count_time
         sleep_time = next_time - now
         if sleep_time > 0:
@@ -47,7 +47,6 @@ async def acquire(count_time, nb_frames, series, dataset, zmq_channel):
             log.error(f'overrun at frame {frame_nb}!')
         if zmq_channel:
             await zmq_channel.send(*frame_parts)
-        await zmq_channel.send(*frame_parts)
         log.debug(f'  [ END ] frame {frame_nb}')
     log.info(f'[ END ] acquisition')
 
