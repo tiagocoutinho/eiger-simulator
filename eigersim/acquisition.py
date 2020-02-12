@@ -1,6 +1,5 @@
 import json
 import time
-import asyncio
 import logging
 import itertools
 
@@ -9,8 +8,8 @@ import zmq
 log = logging.getLogger('eigersim.acquisition')
 
 
-async def acquire(count_time, nb_frames, series, dataset, zmq_channel):
-    log.info(f'[START] acquisition #{series}')
+def acquire(count_time, nb_frames, series, dataset, zmq_channel):
+    log.info(f'[START] acquisition #{series} (prepare)')
     _, f0, encoding = dataset[0]
     p1_base = dict(htype='dimage-1.0', series=series)
     p2_base = dict(htype='dimaged-1.0', shape=f0.shape, size=f0.size,
@@ -24,6 +23,7 @@ async def acquire(count_time, nb_frames, series, dataset, zmq_channel):
     p1s = [zmq.Frame(json.dumps(p).encode()) for p in p1s]
     p3s = [frame for i, (frame, _, _) in zip(range(nb_frames), frames)]
     p4s = []
+    log.info(f'[START] acquisition #{series} (start)')
     start = time.time()
     for frame_nb in range(nb_frames):
         start_nano = int((start + frame_nb * count_time) * 1e9)
@@ -42,11 +42,11 @@ async def acquire(count_time, nb_frames, series, dataset, zmq_channel):
         next_time = start + (frame_nb + 1) * count_time
         sleep_time = next_time - now
         if sleep_time > 0:
-            await asyncio.sleep(sleep_time)
+            time.sleep(sleep_time)
         else:
             log.error(f'overrun at frame {frame_nb}!')
         if zmq_channel:
-            await zmq_channel.send(*frame_parts)
+            zmq_channel.send(*frame_parts)
         log.debug(f'  [ END ] frame {frame_nb}')
     log.info(f'[ END ] acquisition')
 

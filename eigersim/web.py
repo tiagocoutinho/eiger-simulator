@@ -1,14 +1,16 @@
 import enum
 import json
+import queue
 import asyncio
 import logging
 import datetime
 import functools
+import threading
 
 from typing import List
 
+import zmq
 import fastapi
-import zmq.asyncio
 
 from . import config
 from .dataset import frames_iter
@@ -23,7 +25,7 @@ class Version(str, enum.Enum):
     v1_6_0 = '1.6.0'
 
 
-class Queue(asyncio.Queue):
+class Queue(queue.Queue):
 
     def flush(self):
         flushed = 0
@@ -33,9 +35,9 @@ class Queue(asyncio.Queue):
             flushed += 1
         return flushed
 
-    async def __aiter__(self):
+    def __iter__(self):
         while True:
-            yield await self.get()
+            yield self.get()
 
 
 class ZMQChannel:
@@ -43,7 +45,7 @@ class ZMQChannel:
     def __init__(self, address='tcp://*:9999', context=None, timeout=0.1,
                  queue_maxsize=10000):
         self.address = address
-        self.context = context or zmq.asyncio.Context()
+        self.context = context or zmq.Context()
         self.sock = None
         self.task = None
         if timeout in (None, 0):
@@ -53,33 +55,39 @@ class ZMQChannel:
         self.timeout = timeout
         self.queue = Queue(queue_maxsize)
 
-    async def loop(self):
+    def loop(self):
         queue = self.queue
         sock = self.sock
-        async for parts in queue:
+        for parts in queue:
+            if parts is None:
+                break
             try:
                 if len(parts) > 1:
-                    await sock.send_multipart(parts, copy=False)
+                    sock.send_multipart(parts, copy=False)
                 else:
-                    await sock.send(parts[0], copy=False)
+                    sock.send(parts[0], copy=False)
             except zmq.ZMQError as err:
                 flushed = queue.flush()
                 log.info(f'Error send ZMQ: {err!r}. Flushed {flushed} messages')
             queue.task_done()
 
-    async def initialize(self):
+    def initialize(self):
         self.close()
         self.sock = self.context.socket(zmq.PUSH)
         self.sock.sndtimeo = self.timeout
         self.sock.bind(self.address)
-        self.task = asyncio.create_task(self.loop())
+        self.task = threading.Thread(target=self.loop)
+        self.task.daemon = True
+        self.task.start()
 
-    async def send(self, *parts):
-        await self.queue.put(parts)
+    def send(self, *parts):
+        self.queue.put(parts)
 
     def close(self):
+        self.queue.flush()
         if self.task:
-            self.task.cancel()
+            self.queue.put(None)
+            self.task.join()
             self.task = None
         if self.sock:
             log.warn('closing')
@@ -114,10 +122,14 @@ class Detector:
         self.acquisition = None
 
     async def acquire(self, count_time=None):
-        count_time = self.config['count_time']['value'] if count_time is None else count_time
+        if count_time is None:
+            count_time = self.config['count_time']['value']
         nb_frames = self.config['nimages']['value']
         zmq = self.zmq if self.stream_enabled else None
-        return await acquire(count_time, nb_frames, self.series, self.frames, zmq)
+        loop = asyncio.get_running_loop()
+        result = loop.run_in_executor(
+            None, acquire, count_time, nb_frames, self.series, self.frames, zmq)
+        await result
 
     def _build_dataset(self):
         if self.dataset is None:
@@ -142,7 +154,7 @@ class Detector:
         if self.zmq:
             self.zmq.close()
         self.zmq = ZMQChannel(self.zmq_bind)
-        await self.zmq.initialize()
+        self.zmq.initialize()
         log.info('  [ END ] initialize: ZMQ')
         self.status['state']['value'] = 'ready'
         log.info('[ END ] initialize')
@@ -225,13 +237,13 @@ class Detector:
                                     shape=(100, 100), type='float32')
             parts.append(json.dumps(countrate_header).encode())
             parts.append(b'countrate-table-data-blob-here')
-        await self.zmq.send(*parts)
+        self.zmq.send(*parts)
 
     async def send_end_of_series(self, series):
         if not self.stream_enabled:
             return
         header = dict(htype='dseries_end-1.0', series=series)
-        await self.zmq.send(json.dumps(header).encode())
+        self.zmq.send(json.dumps(header).encode())
 
     async def monitor_clear(self):
         raise NotImplementedError
