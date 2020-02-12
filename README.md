@@ -1,7 +1,8 @@
 # Eiger simulator
 
-![Pypi python versions][pypi]
+![Pypi python versions][pypi-python-versions]
 ![Pypi version][pypi-version]
+![License][license]
 
 Dectris Eiger detector simulator.
 
@@ -88,5 +89,6 @@ For reference, here is a simple client that listens to the ZMQ stream:
       print(f'packet #parts={len(data)} size={size/1000} KB')
 ```
 
-[pypi]: https://img.shields.io/pypi/pyversions/eiger-simulator.svg
+[pypi-python-versions]: https://img.shields.io/pypi/pyversions/eiger-simulator.svg
 [pypi-version]: https://img.shields.io/pypi/v/eiger-simulator.svg
+[license]: https://img.shields.io/pypi/l/eiger-simulator.svg
