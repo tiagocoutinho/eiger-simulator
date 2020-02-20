@@ -3,8 +3,6 @@ import json
 import queue
 import asyncio
 import logging
-import datetime
-import functools
 import threading
 
 from typing import List
@@ -137,25 +135,36 @@ class Detector:
         else:
             total_size = 0
             frames = []
+            x = self.config['x_pixels_in_detector']['value']
+            y = self.config['y_pixels_in_detector']['value']
             for frame in frames_iter(self.dataset):
-                total_size += frame.nbytes
-                frames.append((zmq.Frame(frame), frame, f'bs{frame.dtype.itemsize * 8}-lz4<'))
+                total_size += len(frame)
+                # TODO: Calculate encoding, shape (or maybe read it from dataset)
+                frame_info = {
+#                    'encoding': f'bs{frame.dtype.itemsize * 8}-lz4<',
+                    'encoding': f'lz4<',
+                    'shape': [x, y],
+                    'type': 'uint16',
+                    'size': len(frame)
+                }
+                frames.append((zmq.Frame(frame), frame, frame_info))
                 if total_size > self.max_memory:
                     break
+            log.info('Generated %d frames', len(frames))
             self.frames = frames
 
     async def initialize(self):
         log.info('[START] initialize')
-        log.info('  [START] initialize: build dataset')
+        log.info('[START] initialize: build dataset')
         self._build_dataset()
-        log.info('  [ END ] initialize: build dataset')
+        log.info('[ END ] initialize: build dataset')
         self.status['state']['value'] = 'initialize'
-        log.info('  [START] initialize: ZMQ')
+        log.info('[START] initialize: ZMQ')
         if self.zmq:
             self.zmq.close()
         self.zmq = ZMQChannel(self.zmq_bind)
         self.zmq.initialize()
-        log.info('  [ END ] initialize: ZMQ')
+        log.info('[ END ] initialize: ZMQ')
         self.status['state']['value'] = 'ready'
         log.info('[ END ] initialize')
 
@@ -214,7 +223,7 @@ class Detector:
     async def send_global_header_data(self, series):
         if not self.stream_enabled:
             return
-        detail = stream_config['header_detail']['value']
+        detail = self.stream['config']['header_detail']['value']
         header = dict(htype='dheader-1.0', series=series, header_detail=detail)
         parts = [
             json.dumps(header).encode()
@@ -258,7 +267,7 @@ class Detector:
         raise NotImplementedError
 
     async def stream_initialize(self):
-        raise NotImplementedError
+        pass
 
     async def system_restart(self):
         raise NotImplementedError

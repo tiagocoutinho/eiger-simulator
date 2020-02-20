@@ -10,18 +10,18 @@ log = logging.getLogger('eigersim.acquisition')
 
 def acquire(count_time, nb_frames, series, dataset, zmq_channel):
     log.info(f'[START] acquisition #{series} (prepare)')
-    _, f0, encoding = dataset[0]
+    _, f0, info = dataset[0]
     p1_base = dict(htype='dimage-1.0', series=series)
-    p2_base = dict(htype='dimaged-1.0', shape=f0.shape, size=f0.size,
-                   encoding=encoding, type='uint16') # TODO: ensure data type is correct
+    p2_base = dict(htype='dimage_d-1.0', shape=info['shape'],
+                   encoding=info['encoding'], type=info['type']) # TODO: ensure data type is correct
     p4_base = dict(htype='dconfig-1.0')
 
-    frames = itertools.cycle(dataset)
-    p2s = (dict(p2_base) for i in range(nb_frames))
+    p2s = (dict(p2_base, size=info['size'])
+           for i, (_, frame, info) in zip(range(nb_frames), itertools.cycle(dataset)))
     p2s = [zmq.Frame(json.dumps(p).encode()) for p in p2s]
     p1s = (dict(p1_base, frame=i, hash='') for i in range(nb_frames))
     p1s = [zmq.Frame(json.dumps(p).encode()) for p in p1s]
-    p3s = [frame for i, (frame, _, _) in zip(range(nb_frames), frames)]
+    p3s = [frame for i, (frame, _, _) in zip(range(nb_frames), itertools.cycle(dataset))]
     p4s = []
     log.info(f'[START] acquisition #{series} (start)')
     start = time.time()
@@ -36,7 +36,7 @@ def acquire(count_time, nb_frames, series, dataset, zmq_channel):
     parts = [(p1, p2, p3, p4) for p1, p2, p3, p4 in zip(p1s, p2s, p3s, p4s)]
     start = time.monotonic()
     for frame_nb in range(nb_frames):
-        log.debug(f'  [START] frame {frame_nb}')
+        log.debug(f'[START] frame {frame_nb}')
         frame_parts = parts[frame_nb]
         now = time.monotonic()
         next_time = start + (frame_nb + 1) * count_time
@@ -47,7 +47,7 @@ def acquire(count_time, nb_frames, series, dataset, zmq_channel):
             log.error(f'overrun at frame {frame_nb}!')
         if zmq_channel:
             zmq_channel.send(*frame_parts)
-        log.debug(f'  [ END ] frame {frame_nb}')
+        log.debug(f'[ END ] frame {frame_nb}')
     log.info(f'[ END ] acquisition')
 
 

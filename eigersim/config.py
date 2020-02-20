@@ -75,7 +75,7 @@ GEN_DETECTOR_CONFIG = {
     'bit_depth_readout': IntR(12),
     'chi_increment': Float(0.0, -100, 100),
     'chi_start': Float(0.0, -180, 180),
-    'compression': Str('bslz4', allowed_values=['lz4', 'bslz4']),
+    'compression': Str('lz4', allowed_values=['lz4', 'bslz4']),
     'count_time': Float(0.5, 0.0000029, 1800, 's'),
     'countrate_correction_applied': Bool(True),
     'countrate_correction_count_cutoff': IntR(12440),
@@ -144,7 +144,7 @@ GEN_MONITOR_STATUS = {
 
 GEN_STREAM_CONFIG = {
     'mode': Str('enabled', allowed_values=['enabled', 'disabled']),
-    'header_detail': Str('all', allowed_values=['all', 'basic', 'none']),
+    'header_detail': Str('basic', allowed_values=['all', 'basic', 'none']),
     'header_appendix': Str(''),
     'image_appendix': Str(''),
 }
