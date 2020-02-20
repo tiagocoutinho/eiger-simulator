@@ -9,7 +9,7 @@ log = logging.getLogger('eigersim.acquisition')
 
 
 def acquire(count_time, nb_frames, series, dataset, zmq_channel):
-    log.info(f'[START] acquisition #{series} (prepare)')
+    log.info(f'[START] acquisition #{series} (initialize)')
     _, f0, info = dataset[0]
     p1_base = dict(htype='dimage-1.0', series=series)
     p2_base = dict(htype='dimage_d-1.0', shape=info['shape'],
