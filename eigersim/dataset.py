@@ -3,6 +3,8 @@ import logging
 import pathlib
 
 import h5py
+import bitshuffle.h5
+
 import numpy
 
 from . import clz4
