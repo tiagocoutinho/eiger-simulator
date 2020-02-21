@@ -95,6 +95,7 @@ class AcquisitionContext(CtControl.ImageStatusCallback):
     def __exit__(self, exc_type, exc_value, exc_tb):
         if exc_type == KeyboardInterrupt:
             self.ctrl.stopAcq()
+            self.imageStatusChanged(None)
         self.finished.wait()
         self.ctrl.unregisterImageStatusCallback(self)
         del self.ctrl
