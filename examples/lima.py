@@ -1,23 +1,14 @@
-# -*- coding: utf-8 -*-
-#
-# This file is part of the faxtor project
-#
-# Copyright (c) 2019 Tiago Coutinho
-# Distributed under the MIT. See LICENSE for more info.
-
 import os
 import glob
 import time
-import queue
 import pathlib
 import threading
-import contextlib
 import urllib.parse
 
 import pint
-import tqdm
-import click
 import numpy
+from prompt_toolkit import print_formatted_text, HTML
+from prompt_toolkit.shortcuts import ProgressBar
 
 import Lima.Core
 import Lima.Eiger
@@ -27,21 +18,22 @@ ur = pint.UnitRegistry()
 
 
 class ReportTask:
-    DONE = '[{}]'.format(click.style('DONE', fg='green'))
-    FAIL = '[{}]'.format(click.style('FAIL', fg='red'))
-    STOP = '[{}]'.format(click.style('STOP', fg='magenta'))
-    SKIP = '[{}]'.format(click.style('SKIP', fg='yellow'))
+    DONE = '[<green>DONE</green>]'
+    FAIL = '[<red>FAIL</red>]'
+    STOP = '[<magenta><b>STOP</b></magenta>]'
+    SKIP = '[<yellow>SKIP</yellow>]'
 
     def __init__(self, message, **kwargs):
         length = kwargs.pop('length', 40)
         template = '{{:.<{}}} '.format(length)
         self.message = template.format(message)
-        kwargs.setdefault('nl', False)
+        kwargs.setdefault('end', '')
+        kwargs.setdefault('flush', True)
         self.kwargs = kwargs
         self.skipped = False
 
     def __enter__(self):
-        click.secho(self.message, **self.kwargs)
+        print_formatted_text(HTML(self.message), **self.kwargs)
         self.start = time.time()
         return self
 
@@ -60,73 +52,55 @@ class ReportTask:
             if not self.skipped:
                 elapsed = ((self.elapsed) * ur.s).to_compact()
                 msg += ' (took {:~.4})'.format(elapsed)
-        elif exc_type == KeyboardInterrupt:
-            msg = self.STOP
+        elif exc_type is KeyboardInterrupt:
+            return False
         else:
             msg = self.FAIL + f'({exc_value!r})'
-        click.secho(msg)
+        print_formatted_text(HTML(msg))
         return False
 
 
-class ProgressBar(tqdm.tqdm):
-    def __init__(self, *args, **kwargs):
-        self.event = kwargs.pop('event')
-        super().__init__(*args, **kwargs)
-
-    def update_status(self, status):
-        n = getattr(status.ImageCounters, self.event) + 1
-        progress = n - self.n
-        if progress > 0:
-            self.update(progress)
-
-
-class AcquisitionContext(CtControl.ImageStatusCallback):
+class AcquisitionContext(Lima.Core.CtControl.ImageStatusCallback):
 
     def __init__(self, ctrl, cb=None):
-        self.ctrl = ctrl
-        self.cb = cb or (lambda status: None)
-        self.finished = threading.Event()
         super().__init__()
+        self.ctrl = ctrl
+        self.cb = cb
 
     def __enter__(self):
+        self.finished = threading.Event()
         self.ctrl.registerImageStatusCallback(self)
         return self
 
     def __exit__(self, exc_type, exc_value, exc_tb):
         if exc_type == KeyboardInterrupt:
-            self.ctrl.stopAcq()
-            self.imageStatusChanged(None)
-        self.finished.wait()
+            self.stopAcq()
+        elif self.status.AcquisitionStatus == AcqRunning:
+            self.stopAcq()
         self.ctrl.unregisterImageStatusCallback(self)
-        del self.ctrl
+
+    def prepareAcq(self):
+        self.ctrl.prepareAcq()
+
+    def startAcq(self):
+        self.ctrl.startAcq()
+
+    def stopAcq(self):
+        self.ctrl.stopAcq()
 
     def imageStatusChanged(self, image_status):
-        status = self.ctrl.getStatus()
+        status = self.status
+        if self.cb:
+            self.cb(status)
         if status.AcquisitionStatus != AcqRunning:
             self.finished.set()
-        self.cb(status)
 
+    @property
+    def status(self):
+        return self.ctrl.getStatus()
 
-def print_information(options):
-    fsize = Size(3110, 3269)
-    frame_dim = FrameDim(fsize, options.frame_type)
-    exposure_time = options.exposure_time * ur.second
-    acq_time = (options.nb_frames * exposure_time).to_compact()
-    frame_rate = (1/exposure_time).to(ur.Hz).to_compact()
-    print('Information -------------------------------------------------------')
-    print('Frame size: {}'.format(frame_dim))
-    print('Acquisition speed: {:~.4}'.format(frame_rate))
-    print('Total acquisition time: {:~.4}'.format(acq_time))
-    print('-------------------------------------------------------------------')
-    print()
-
-
-def print_stats(options, acq_task):
-    elapsed = ((acq_task.elapsed) * ur.s).to_compact()
-    print('Stats -------------------------------------------------------------')
-    print('Total time: {:~.4}'.format(elapsed))
-    print('-------------------------------------------------------------------')
-    print()
+    def wait(self):
+        return self.finished.wait()
 
 
 def control(options):
@@ -151,54 +125,13 @@ def configure(ctrl, options):
     saving.setFormat(options.saving_format)
     saving.setPrefix(options.saving_prefix)
     saving.setSuffix(options.saving_suffix)
-    saving.setMaxConcurrentWritingTask(options.saving_tasks)
+    saving.setMaxConcurrentWritingTask(options.nb_saving_tasks)
     if options.saving_directory:
         saving.setSavingMode(saving.AutoFrame)
         saving.setDirectory(options.saving_directory)
     acq.setAcqExpoTime(options.exposure_time)
     acq.setAcqNbFrames(options.nb_frames)
     buff.setMaxMemory(options.max_buffer_size)
-
-
-def prepare(ctrl, options):
-    ctrl.prepareAcq()
-
-
-def acquisition_generator(ctrl, events, cb, options):
-    ctrl.startAcq()
-    while not cb.finished.is_set():
-        yield events.get()
-
-
-def acquisition_wait(ctrl, events, cb, options):
-    ctrl.startAcq()
-    cb.finished.wait()
-
-
-def acquisition_progress(ctrl, events, cb, options):
-    nb_frames = options.nb_frames
-    total_acq_time = nb_frames * options.exposure_time
-    acq_pb = ProgressBar(total=nb_frames, position=0, event='LastImageReady',
-                         desc='  Ready', unit='frame')
-    bars = [acq_pb]
-    if options.saving_directory:
-        sav_pb = ProgressBar(total=nb_frames, position=1, event='LastImageSaved',
-                             desc='  Saved', unit='frame')
-        bars.append(sav_pb)
-    else:
-        sav_pb = contextlib.nullcontext()
-    acq_gen = acquisition_generator(ctrl, events, cb, options)
-    with acq_pb, sav_pb:
-        for status in acq_gen:
-            for bar in bars:
-                bar.update_status(status)
-    print()
-
-
-def stop(ctrl, options, event=None):
-    ctrl.stopAcq()
-    if event:
-        event.wait()
 
 
 def cleanup(ctrl, options):
@@ -208,40 +141,58 @@ def cleanup(ctrl, options):
         os.remove(filename)
 
 
+def AcqProgBar():
+    return ProgressBar(
+        title='Acquiring....',
+        bottom_toolbar=HTML(" <b>[Control-C]</b> abort")
+    )
+
+
+class AcquisitionMonitor:
+    def __init__(self, ctx, prog_bar, options):
+        self.ctx = ctx
+        nb_frames = options.nb_frames
+        self.acq_counter = prog_bar(label='Acquired', total=nb_frames)
+        self.base_counter = prog_bar(label='Base Ready', total=nb_frames)
+        self.img_counter = prog_bar(label='Ready', total=nb_frames)
+        if options.saving_directory:
+            self.save_counter = prog_bar(label='Saved', total=nb_frames)
+        else:
+            self.save_counter = None
+
+    def update(self, status):
+        counters = status.ImageCounters
+        self.acq_counter.set_items_completed(counters.LastImageAcquired + 1)
+        self.base_counter.set_items_completed(counters.LastBaseImageReady + 1)
+        self.img_counter.set_items_completed(counters.LastImageReady + 1)
+        if self.save_counter:
+            self.save_counter.set_items_completed(counters.LastImageSaved + 1)
+
+    def run(self):
+        while not self.ctx.finished.is_set():
+            self.update(self.ctx.status)
+            time.sleep(0.5)
+        self.update(self.ctx.status)
+
+
 def run(options):
-    print_information(options)
-
-    if options.dry_run:
-        return
-
-    total_acq_time = options.nb_frames * options.exposure_time
-    progress = not options.no_progressbar
-    ack_task = None
-    try:
-        with ReportTask('Initializing'):
-            ctrl = control(options)
-        with ReportTask('Configuring'):
-            configure(ctrl, options)
-        events = queue.Queue()
-        with AcquisitionContext(ctrl, events.put) as cb:
-            with ReportTask('Preparing'):
-                prepare(ctrl, options)
-            if progress:
-                with ReportTask('Acquiring', nl=True) as acq_task:
-                    acquisition_progress(ctrl, events, cb, options)
-            else:
-                with ReportTask('Acquiring') as acq_task:
-                    acquisition_wait(ctrl, events, cb, options)
-    except KeyboardInterrupt:
-        click.secho('Ctrl-C pressed. Bailing out!', fg='yellow')
-    finally:
-        with ReportTask('Cleaning up') as task:
-            if options.no_cleanup or not options.saving_directory:
-                task.skip()
-            else:
-                cleanup(ctrl, options)
-    if ack_task:
-        print_stats(options, acq_task)
+    with ReportTask('Initializing'):
+        ctrl = control(options)
+    with ReportTask('Configuring'):
+        configure(ctrl, options)
+    with AcquisitionContext(ctrl) as ctx:
+        with ReportTask('Preparing'):
+            ctx.prepareAcq()
+        with ReportTask('Acquiring', end='\n'):
+            ctx.startAcq()
+            with AcqProgBar() as prog_bar:
+                monitor = AcquisitionMonitor(ctx, prog_bar, options)
+                monitor.run()
+    with ReportTask('Cleaning up') as task:
+        if options.no_cleanup or not options.saving_directory:
+            task.skip()
+        else:
+            cleanup(ctrl, options)
 
 
 def main(args=None):
@@ -275,16 +226,12 @@ def main(args=None):
                         help='pixel format (ex: Bpp8) [default: Bpp16]')
     parser.add_argument('--max-buffer-size', type=float, default=50,
                         help='maximum buffer size (%% total memory) [default: %(default)s %%]')
-    parser.add_argument('--saving-tasks', type=int, default=1,
+    parser.add_argument('--nb-saving-tasks', type=int, default=1,
                         help='nb. of saving tasks [default: %(default)s]')
     parser.add_argument('--nb-processing-tasks', type=int, default=2,
                         help='nb. of processing tasks [default: %(default)s]')
-    parser.add_argument('--dry-run', default=False, action='store_true',
-                        help='if set only print information and exit')
     parser.add_argument('--no-cleanup', default=False, action='store_true',
                         help='do not cleanup saving directory')
-    parser.add_argument('--no-progressbar', default=False, action='store_true',
-                        help='do not show progress bar')
     options = parser.parse_args(args)
 
     options.saving_format_name = options.saving_format
@@ -292,7 +239,6 @@ def main(args=None):
     if options.saving_suffix == '__AUTO_SUFFIX__':
         options.saving_suffix = file_format_suffix[options.saving_format_name]
     run(options)
-
 
 if __name__ == '__main__':
     main()
