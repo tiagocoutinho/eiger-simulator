@@ -55,7 +55,7 @@ class CB(Lima.Core.CtControl.ImageStatusCallback):
 
 def new_lima_eiger(url):
     log.info('[START] create lima')
-    eiger = Lima.Eiger.Camera('127.0.0.1:8000')
+    eiger = Lima.Eiger.Camera(url)
     #eiger.initialize()
     iface = Lima.Eiger.Interface(eiger)
     ctrl = Lima.Core.CtControl(iface)
