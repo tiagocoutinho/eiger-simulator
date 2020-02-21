@@ -93,6 +93,15 @@ class ZMQChannel:
             self.sock = None
 
 
+class Cancel:
+
+    def __init__(self):
+        self.cancel = False
+
+    def __bool__(self):
+        return self.cancel
+
+
 class Detector:
 
     def __init__(self, zmq_bind='tcp://0:9999', dataset=None, max_memory=1_000_000_000):
@@ -119,14 +128,15 @@ class Detector:
         self.series = 0
         self.acquisition = None
 
-    async def acquire(self, count_time=None):
+    async def acquire(self, cancel, count_time=None):
         if count_time is None:
             count_time = self.config['count_time']['value']
         nb_frames = self.config['nimages']['value']
         zmq = self.zmq if self.stream_enabled else None
         loop = asyncio.get_running_loop()
         result = loop.run_in_executor(
-            None, acquire, count_time, nb_frames, self.series, self.frames, zmq)
+            None, acquire, count_time, nb_frames, self.series, self.frames,
+            zmq, cancel)
         await result
 
     def _build_dataset(self):
@@ -180,22 +190,27 @@ class Detector:
     async def disarm(self):
         if self.acquisition:
             self.acquisition.cancel()
+            self.acquisition.stop.cancel = True
         return self.series
 
     async def cancel(self):
         if self.acquisition:
             self.acquisition.cancel()
+            self.acquisition.stop.cancel = True
         return self.series
 
     async def abort(self):
         if self.acquisition:
             self.acquisition.cancel()
+            self.acquisition.stop.cancel = True
         return self.series
 
     def trigger(self, count_time=None):
         if self.acquisition:
             raise RuntimeError('Acquisition already in progress')
-        self.acquisition = asyncio.create_task(self.acquire(count_time))
+        cancel = Cancel()
+        self.acquisition = asyncio.create_task(self.acquire(cancel, count_time))
+        self.acquisition.stop = cancel
         self.acquisition.add_done_callback(self._on_acquisition_finished)
         return self.acquisition
 
@@ -330,7 +345,10 @@ async def disarm(version: Version):
 
 @app.put('/detector/api/{version}/command/trigger')
 async def trigger(version: Version, count_time: float = None):
-    await app.detector.trigger(count_time)
+    try:
+        await app.detector.trigger(count_time)
+    except asyncio.CancelledError:
+        pass
 
 
 @app.put('/detector/api/{version}/command/cancel')

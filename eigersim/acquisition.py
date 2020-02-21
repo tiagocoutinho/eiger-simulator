@@ -8,7 +8,7 @@ import zmq
 log = logging.getLogger('eigersim.acquisition')
 
 
-def acquire(count_time, nb_frames, series, dataset, zmq_channel):
+def acquire(count_time, nb_frames, series, dataset, zmq_channel, cancel):
     log.info(f'[START] acquisition #{series} (initialize)')
     _, f0, info = dataset[0]
     p1_base = dict(htype='dimage-1.0', series=series)
@@ -36,6 +36,8 @@ def acquire(count_time, nb_frames, series, dataset, zmq_channel):
     parts = [(p1, p2, p3, p4) for p1, p2, p3, p4 in zip(p1s, p2s, p3s, p4s)]
     start = time.monotonic()
     for frame_nb in range(nb_frames):
+        if cancel:
+            break
         log.debug(f'[START] frame {frame_nb}')
         frame_parts = parts[frame_nb]
         now = time.monotonic()
