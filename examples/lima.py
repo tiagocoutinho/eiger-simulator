@@ -12,7 +12,7 @@ from prompt_toolkit.shortcuts import ProgressBar
 
 import Lima.Core
 import Lima.Eiger
-from Lima.Core import CtControl, CtSaving, AcqReady, AcqRunning, Size, FrameDim, Bpp8, Bpp16
+from Lima.Core import CtControl, CtSaving, AcqReady, AcqRunning, AcqFault, Size, FrameDim, Bpp8, Bpp16
 
 ur = pint.UnitRegistry()
 
@@ -83,8 +83,6 @@ class AcquisitionContext(Lima.Core.CtControl.ImageStatusCallback):
         self.cb = cb
 
     def __enter__(self):
-        self.finished = threading.Event()
-        self.ctrl.registerImageStatusCallback(self)
         return self
 
     def __exit__(self, exc_type, exc_value, exc_tb):
@@ -92,10 +90,6 @@ class AcquisitionContext(Lima.Core.CtControl.ImageStatusCallback):
             self.stopAcq()
         elif self.status.AcquisitionStatus == AcqRunning:
             self.stopAcq()
-        try:
-            self.ctrl.unregisterImageStatusCallback(self)
-        except Exception as err:
-            pass
 
     def prepareAcq(self):
         self.ctrl.prepareAcq()
@@ -106,19 +100,9 @@ class AcquisitionContext(Lima.Core.CtControl.ImageStatusCallback):
     def stopAcq(self):
         self.ctrl.stopAcq()
 
-    def imageStatusChanged(self, image_status):
-        status = self.status
-        if self.cb:
-            self.cb(status)
-        if status.AcquisitionStatus != AcqRunning:
-            self.finished.set()
-
     @property
     def status(self):
         return self.ctrl.getStatus()
-
-    def wait(self):
-        return self.finished.wait()
 
 
 def control(options):
@@ -161,9 +145,18 @@ def cleanup(ctrl, options):
         os.remove(filename)
 
 
-def AcqProgBar():
+def AcqProgBar(ctrl, options):
+    iface = ctrl.hwInterface()
+    info = iface.getHwCtrlObj(Lima.Core.HwCap.DetInfo)
+    frame_dim = FrameDim(info.getDetectorImageSize(), info.getCurrImageType())
+    exposure_time = options.exposure_time * ur.second
+    acq_time = (options.nb_frames * exposure_time).to_compact()
+    frame_rate = (1/exposure_time).to(ur.Hz).to_compact()
+    title = f'Acquiring on {info.getDetectorModel()} ({info.getDetectorType()}) | ' \
+            f'{options.nb_frames} x {exposure_time:~.4}({frame_rate:~.4}) = {acq_time:~.4}  | ' \
+            f'{frame_dim}'
     return ProgressBar(
-        title='Acquiring....',
+        title=title,
         bottom_toolbar=HTML(" <b>[Control-C]</b> abort")
     )
 
@@ -188,14 +181,20 @@ class AcquisitionMonitor:
         self.img_counter.set_items_completed(counters.LastImageReady + 1)
         if self.save_counter:
             self.save_counter.set_items_completed(counters.LastImageSaved + 1)
+        acq = status.AcquisitionStatus
+        if status.Error != Lima.Core.CtControl.NoError:
+            error = ErrorMap[status.Error]
+            print_formatted_text(HTML(f'<red>Acquisition error: </red> <b>{error}</b>'))
+        elif acq == AcqFault:
+            print_formatted_text(HTML(f'<orange>Acquisition fault</orange>'))
+        return acq == AcqRunning and status.Error == Lima.Core.CtControl.NoError
 
     def run(self):
         while True:
             status = self.ctx.status
-            self.update(status)
-            if status.AcquisitionStatus != AcqRunning:
+            if not self.update(status):
                 break
-            time.sleep(0.1)
+            time.sleep(0.05)
         self.update(self.ctx.status)
 
 
@@ -210,15 +209,13 @@ def run(options):
                 ctx.prepareAcq()
             with ReportTask('Acquiring', end='\n'):
                 ctx.startAcq()
-                with AcqProgBar() as prog_bar:
+                with AcqProgBar(ctrl, options) as prog_bar:
                     monitor = AcquisitionMonitor(ctx, prog_bar, options)
                     monitor.run()
     except KeyboardInterrupt:
         pass
     except:
         status = ctx.status
-        error = ErrorMap[status.Error]
-        print_formatted_text(HTML(f'<red>Acquisition error: </red> <b></b>{error}'))
     finally:
         with ReportTask('Cleaning up') as task:
             if options.no_cleanup or not options.saving_directory:
@@ -266,9 +263,9 @@ def main(args=None):
                         help='do not cleanup saving directory')
     options = parser.parse_args(args)
     debug_params = 'Fatal', 'Error', 'Warning', 'Always', 'Trace', 'Param', 'Return'
-    Lima.Core.DebParams.setTypeFlagsNameList([])
-    Lima.Core.DebParams.setModuleFlagsNameList([])
-    Lima.Core.DebParams.setFormatFlagsNameList([])
+    Lima.Core.DebParams.setTypeFlags(0)
+    Lima.Core.DebParams.setModuleFlags(0)
+    Lima.Core.DebParams.setFormatFlags(0)
     options.saving_format_name = options.saving_format
     options.saving_format = file_format_options[options.saving_format]
     if options.saving_suffix == '__AUTO_SUFFIX__':
