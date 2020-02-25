@@ -174,13 +174,17 @@ class AcquisitionMonitor:
         else:
             self.save_counter = None
 
+    def set_items_completed(self, bar, n):
+        bar.items_completed = n
+        self.prog_bar.invalidate()
+
     def update(self, status):
         counters = status.ImageCounters
-        self.acq_counter.set_items_completed(counters.LastImageAcquired + 1)
-        self.base_counter.set_items_completed(counters.LastBaseImageReady + 1)
-        self.img_counter.set_items_completed(counters.LastImageReady + 1)
+        self.set_items_completed(self.acq_counter, counters.LastImageAcquired + 1)
+        self.set_items_completed(self.base_counter, counters.LastBaseImageReady + 1)
+        self.set_items_completed(self.img_counter, counters.LastImageReady + 1)
         if self.save_counter:
-            self.save_counter.set_items_completed(counters.LastImageSaved + 1)
+            self.set_items_completed(self.save_counter, counters.LastImageSaved + 1)
         acq = status.AcquisitionStatus
         if status.Error != Lima.Core.CtControl.NoError:
             error = ErrorMap[status.Error]
