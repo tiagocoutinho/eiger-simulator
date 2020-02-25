@@ -17,6 +17,21 @@ from Lima.Core import CtControl, CtSaving, AcqReady, AcqRunning, Size, FrameDim,
 ur = pint.UnitRegistry()
 
 
+ErrorMap = {
+    Lima.Core.CtControl.NoError:           "No error",
+    Lima.Core.CtControl.SaveUnknownError:  "Saving error",
+    Lima.Core.CtControl.SaveOpenError:     "Save file open error",
+    Lima.Core.CtControl.SaveCloseError:    "Save file close error",
+    Lima.Core.CtControl.SaveAccessError:   "Save access error",
+    Lima.Core.CtControl.SaveOverwriteError: "Save overwrite error",
+    Lima.Core.CtControl.SaveDiskFull:      "Save disk full",
+    Lima.Core.CtControl.SaveOverun:        "Save overrun",
+    Lima.Core.CtControl.ProcessingOverun:  "Soft Processing overrun",
+    Lima.Core.CtControl.CameraError:       "Camera Error",
+#    Lima.Core.CtControl.EventOther:        "Other enexpected event",
+}
+
+
 class ReportTask:
     DONE = '[<green>DONE</green>]'
     FAIL = '[<red>FAIL</red>]'
@@ -77,7 +92,10 @@ class AcquisitionContext(Lima.Core.CtControl.ImageStatusCallback):
             self.stopAcq()
         elif self.status.AcquisitionStatus == AcqRunning:
             self.stopAcq()
-        self.ctrl.unregisterImageStatusCallback(self)
+        try:
+            self.ctrl.unregisterImageStatusCallback(self)
+        except Exception as err:
+            pass
 
     def prepareAcq(self):
         self.ctrl.prepareAcq()
@@ -104,9 +122,11 @@ class AcquisitionContext(Lima.Core.CtControl.ImageStatusCallback):
 
 
 def control(options):
+    if not options.url.startswith('http://'):
+        options.url = 'http://' + options.url
     url = urllib.parse.urlparse(options.url)
-    path = url.netloc if url.netloc else url.path
-    eiger = Lima.Eiger.Camera(path)
+    port = 80 if url.port is None else url.port
+    eiger = Lima.Eiger.Camera(url.hostname, port)
     #eiger.initialize()
     iface = Lima.Eiger.Interface(eiger)
     ctrl = CtControl(iface)
@@ -152,6 +172,7 @@ class AcquisitionMonitor:
     def __init__(self, ctx, prog_bar, options):
         self.ctx = ctx
         nb_frames = options.nb_frames
+        self.prog_bar = prog_bar
         self.acq_counter = prog_bar(label='Acquired', total=nb_frames)
         self.base_counter = prog_bar(label='Base Ready', total=nb_frames)
         self.img_counter = prog_bar(label='Ready', total=nb_frames)
@@ -169,9 +190,12 @@ class AcquisitionMonitor:
             self.save_counter.set_items_completed(counters.LastImageSaved + 1)
 
     def run(self):
-        while not self.ctx.finished.is_set():
-            self.update(self.ctx.status)
-            time.sleep(0.5)
+        while True:
+            status = self.ctx.status
+            self.update(status)
+            if status.AcquisitionStatus != AcqRunning:
+                break
+            time.sleep(0.1)
         self.update(self.ctx.status)
 
 
@@ -180,19 +204,27 @@ def run(options):
         ctrl = control(options)
     with ReportTask('Configuring'):
         configure(ctrl, options)
-    with AcquisitionContext(ctrl) as ctx:
-        with ReportTask('Preparing'):
-            ctx.prepareAcq()
-        with ReportTask('Acquiring', end='\n'):
-            ctx.startAcq()
-            with AcqProgBar() as prog_bar:
-                monitor = AcquisitionMonitor(ctx, prog_bar, options)
-                monitor.run()
-    with ReportTask('Cleaning up') as task:
-        if options.no_cleanup or not options.saving_directory:
-            task.skip()
-        else:
-            cleanup(ctrl, options)
+    try:
+        with AcquisitionContext(ctrl) as ctx:
+            with ReportTask('Preparing'):
+                ctx.prepareAcq()
+            with ReportTask('Acquiring', end='\n'):
+                ctx.startAcq()
+                with AcqProgBar() as prog_bar:
+                    monitor = AcquisitionMonitor(ctx, prog_bar, options)
+                    monitor.run()
+    except KeyboardInterrupt:
+        pass
+    except:
+        status = ctx.status
+        error = ErrorMap[status.Error]
+        print_formatted_text(HTML(f'<red>Acquisition error: </red> <b></b>{error}'))
+    finally:
+        with ReportTask('Cleaning up') as task:
+            if options.no_cleanup or not options.saving_directory:
+                task.skip()
+            else:
+                cleanup(ctrl, options)
 
 
 def main(args=None):
@@ -233,7 +265,10 @@ def main(args=None):
     parser.add_argument('--no-cleanup', default=False, action='store_true',
                         help='do not cleanup saving directory')
     options = parser.parse_args(args)
-
+    debug_params = 'Fatal', 'Error', 'Warning', 'Always', 'Trace', 'Param', 'Return'
+    Lima.Core.DebParams.setTypeFlagsNameList([])
+    Lima.Core.DebParams.setModuleFlagsNameList([])
+    Lima.Core.DebParams.setFormatFlagsNameList([])
     options.saving_format_name = options.saving_format
     options.saving_format = file_format_options[options.saving_format]
     if options.saving_suffix == '__AUTO_SUFFIX__':
