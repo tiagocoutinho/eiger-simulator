@@ -59,8 +59,10 @@ Options:
 The client is accessible as a python library:
 
 ```python
->>> from import eigersim.client import Eiger
->>> eiger = Eiger('127.0.0.1:8000')
+>>> from eigersim.client import Eiger
+>>> eiger = Eiger('http://127.0.0.1:8000')
+>>> eiger.initialize()
+[response 200]
 >>> eiger.nimages
 100
 >>> eiger.count_time
