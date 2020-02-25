@@ -6,7 +6,6 @@ import threading
 import urllib.parse
 
 import pint
-import numpy
 from prompt_toolkit import print_formatted_text, HTML
 from prompt_toolkit.shortcuts import ProgressBar
 

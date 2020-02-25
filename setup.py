@@ -15,7 +15,8 @@ if TESTING:
     setup_requirements += ['pytest-runner']
 test_requirements = ['pytest', 'pytest-cov']
 extras_requirements = {
-    'client' : ['requests']
+    'client' : ['requests'],
+    'lima': ['pint', 'prompt_toolkit>=3.0.3']
 }
 
 with open('README.md') as f:
