@@ -38,7 +38,6 @@ def acquire(count_time, nb_frames, series, dataset, zmq_channel, cancel):
     for frame_nb in range(nb_frames):
         if cancel:
             break
-        log.debug(f'[START] frame {frame_nb}')
         frame_parts = parts[frame_nb]
         now = time.monotonic()
         next_time = start + (frame_nb + 1) * count_time
@@ -49,7 +48,6 @@ def acquire(count_time, nb_frames, series, dataset, zmq_channel, cancel):
             log.error(f'overrun at frame {frame_nb}!')
         if zmq_channel:
             zmq_channel.send(*frame_parts)
-        log.debug(f'[ END ] frame {frame_nb}')
     log.info(f'[ END ] acquisition')
 
 
