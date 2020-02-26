@@ -23,25 +23,9 @@ class Version(str, enum.Enum):
     v1_6_0 = '1.6.0'
 
 
-class Queue(queue.Queue):
-
-    def flush(self):
-        flushed = 0
-        while not self.empty():
-            self.get_nowait()
-            self.task_done()
-            flushed += 1
-        return flushed
-
-    def __iter__(self):
-        while True:
-            yield self.get()
-
-
 class ZMQChannel:
 
-    def __init__(self, address='tcp://*:9999', context=None, timeout=0.1,
-                 queue_maxsize=10000):
+    def __init__(self, address='tcp://*:9999', context=None, timeout=0.5):
         self.address = address
         self.context = context or zmq.Context()
         self.sock = None
@@ -51,12 +35,16 @@ class ZMQChannel:
         else:
             timeout = -1 if timeout < 0 else int(timeout * 1000)
         self.timeout = timeout
-        self.queue = Queue(queue_maxsize)
+
+    def new_queue(self):
+        self.queue = queue.SimpleQueue()
+        return self.queue
 
     def loop(self):
-        queue = self.queue
+        queue = self.new_queue()
         sock = self.sock
-        for parts in queue:
+        while True:
+            parts = queue.get()
             if parts is None:
                 break
             try:
@@ -65,9 +53,11 @@ class ZMQChannel:
                 else:
                     sock.send(parts[0], copy=False)
             except zmq.ZMQError as err:
-                flushed = queue.flush()
+                new_queue = self.new_queue()
+                flushed = queue.qsize()
+                queue = new_queue
                 log.info(f'Error send ZMQ: {err!r}. Flushed {flushed} messages')
-            queue.task_done()
+        self.new_queue()
 
     def initialize(self):
         self.close()
@@ -82,7 +72,6 @@ class ZMQChannel:
         self.queue.put(parts)
 
     def close(self):
-        self.queue.flush()
         if self.task:
             self.queue.put(None)
             self.task.join()
