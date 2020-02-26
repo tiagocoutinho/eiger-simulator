@@ -152,7 +152,9 @@ class Detector:
                 frames.append((zmq.Frame(frame), frame, frame_info))
                 if total_size > self.max_memory:
                     break
-            log.info('Generated %d frames', len(frames))
+            nb_frames = len(frames)
+            log.info('Generated %d frames in %f MB of RAM (avg %f MB / frame)',
+                     nb_frames, total_size*1e-6, total_size / nb_frames * 1e-6)
             self.frames = frames
 
     async def initialize(self):
