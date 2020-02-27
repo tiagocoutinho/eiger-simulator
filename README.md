@@ -94,7 +94,7 @@ For reference, here is a simple client that listens to the ZMQ stream:
 
 ## Benchmarks
 
-Benchmark results available [here](./benchmarks.md).
+Benchmark results available [here](docs/benchmarks.md).
 
 
 [pypi-python-versions]: https://img.shields.io/pypi/pyversions/eiger-simulator.svg
