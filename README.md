@@ -92,6 +92,11 @@ For reference, here is a simple client that listens to the ZMQ stream:
       print(f'packet #parts={len(data)} size={size/1000} KB')
 ```
 
+## Benchmarks
+
+Benchmark results available [here](./benchmarks.md).
+
+
 [pypi-python-versions]: https://img.shields.io/pypi/pyversions/eiger-simulator.svg
 [pypi-version]: https://img.shields.io/pypi/v/eiger-simulator.svg
 [pypi-status]: https://img.shields.io/pypi/status/eiger-simulator.svg
