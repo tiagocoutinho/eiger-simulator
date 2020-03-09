@@ -68,3 +68,10 @@ python lima.py --url=10.24.24.4:8000 \
 |  2  |  140 Hz |  798 MB/s |
 |  3  |  220 Hz | 1254 MB/s |
 |  4  |  270 Hz | 1540 MB/s |
+
+Higher frame rates bound by simulator maximum speed.
+
+In a laptop the simulator behaved without overrun up to 600 Hz.
+
+Further investigation needed to find why the simulator performace is not good
+in ctsimdetector.
