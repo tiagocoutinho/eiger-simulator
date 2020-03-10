@@ -83,6 +83,8 @@ in ctsimdetector.
 
 ## 2020-03-09
 
+![Demo video](./video.svg)
+
 * eiger-simulator
   *  git version: d1924d
 
