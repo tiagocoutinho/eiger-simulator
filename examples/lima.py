@@ -16,6 +16,9 @@ from Lima.Core import CtControl, CtSaving, AcqReady, AcqRunning, AcqFault, Size,
 ur = pint.UnitRegistry()
 
 
+# missing in sip:
+Lima.Core.CtControl.EventOther = 10
+
 ErrorMap = {
     Lima.Core.CtControl.NoError:           "No error",
     Lima.Core.CtControl.SaveUnknownError:  "Saving error",
@@ -26,8 +29,8 @@ ErrorMap = {
     Lima.Core.CtControl.SaveDiskFull:      "Save disk full",
     Lima.Core.CtControl.SaveOverun:        "Save overrun",
     Lima.Core.CtControl.ProcessingOverun:  "Soft Processing overrun",
-    Lima.Core.CtControl.CameraError:       "Camera Error",
-#    Lima.Core.CtControl.EventOther:        "Other enexpected event",
+    Lima.Core.CtControl.CameraError:       "Camera error",
+    Lima.Core.CtControl.EventOther:        "Unspecified error event"
 }
 
 
@@ -70,6 +73,8 @@ class ReportTask:
             return False
         else:
             msg = self.FAIL + f'({exc_value!r})'
+            import traceback
+            traceback.print_tb(exc_tb)
         print_formatted_text(HTML(msg))
         return False
 
