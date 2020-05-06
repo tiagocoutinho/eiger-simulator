@@ -50,10 +50,19 @@ from .web import app, Detector
     help="Show only logs with priority LEVEL or above",
     show_default=True
 )
-def main(host: str, port: int, zmq: str, dataset: click.Path, max_memory: int, log_level: str):
+@click.option(
+    "--default-compression",
+    type=click.Choice(['bslz4', 'lz4']),
+    default='bslz4',
+    help="Default compression",
+    show_default=True
+)
+def main(host: str, port: int, zmq: str, dataset: click.Path, max_memory: int,
+         log_level: str, default_compression: str):
     fmt = '%(threadName)-10s %(asctime)-15s %(levelname)-5s %(name)s: %(message)s'
     logging.basicConfig(level=log_level.upper(), format=fmt)
     detector = Detector(zmq_bind=zmq, dataset=dataset, max_memory=max_memory)
+    detector.config['compression']['value'] = default_compression
     app.detector = detector
     uvicorn.run(app, host=host, port=port)
 

@@ -59,7 +59,7 @@ class ZMQChannel:
                 new_queue = self.new_queue()
                 flushed = queue.qsize()
                 queue = new_queue
-                log.info(f'Error send ZMQ: {err!r}. Flushed {flushed} messages')
+                log.error(f'Error send ZMQ: {err!r}. Flushed {flushed} messages')
         self.new_queue()
 
     def initialize(self):
@@ -139,12 +139,12 @@ class Detector:
             frames = []
             x = self.config['x_pixels_in_detector']['value']
             y = self.config['y_pixels_in_detector']['value']
-            for frame in frames_iter(self.dataset):
+            compression = self.config['compression']['value']
+            encoding = 'lz4<' if compression == 'lz4' else 'bs16-lz4<'
+            for frame in frames_iter(self.dataset, compression=compression):
                 total_size += len(frame)
-                # TODO: Calculate encoding, shape (or maybe read it from dataset)
                 frame_info = {
-#                    'encoding': f'bs{frame.dtype.itemsize * 8}-lz4<',
-                    'encoding': f'lz4<',
+                    'encoding': encoding,
                     'shape': [x, y],
                     'type': 'uint16',
                     'size': len(frame)
@@ -303,7 +303,6 @@ def version():
 
 @app.get('/detector/api/{version}/config/{param}')
 def detector_config(version: Version, param: str):
-
     return app.detector.config[param]
 
 

@@ -1,6 +1,8 @@
+import os
 import pickle
 import logging
 import pathlib
+import concurrent.futures
 
 import h5py
 import bitshuffle.h5
@@ -31,7 +33,8 @@ class DataHDF5:
 
 # MODE 1: frames from dataset
 
-def frames_iter_dataset(filename):
+
+def frames_iter_dataset(filename, compression='lz4'):
     """Iterate over frames from a dataset stored in disk"""
     filename = pathlib.Path(filename)
     if filename.is_dir():
@@ -41,7 +44,7 @@ def frames_iter_dataset(filename):
         if not cache_directory.is_dir():
             _build_dataset_cache(filename, cache_directory)
     for fname in cache_directory.iterdir():
-        if fname.suffix != '.pickle':
+        if not fname.name.endswith('.{}.pickle'.format(compression)):
             continue
         with open(fname, 'rb') as fobj:
             dataset = pickle.load(fobj)
@@ -55,16 +58,35 @@ def _build_dataset_cache(filename, dest=None):
         dest = filename.parent / '__cache__'
     dest = pathlib.Path(dest)
     dest.mkdir(exist_ok=True)
+    nb_cpus = os.cpu_count()
+    executor = concurrent.futures.ThreadPoolExecutor(max_workers=nb_cpus)
+    tasks = []
     for name, dataset in _h5_iter(filename):
-        _save_dataset(name, dest, dataset)
+        task = executor.submit(_save_dataset_lz4, name, dest, dataset)
+        tasks.append(task)
+        task = executor.submit(_save_dataset_bslz4, name, dest, dataset)
+        tasks.append(task)
+    concurrent.futures.wait(tasks)
 
 
-def _save_dataset(name, dest_dir, dataset):
+def _save_dataset_lz4(name, dest_dir, dataset):
     filename = dest_dir / name
-    filename = filename.with_suffix('.pickle')
+    filename = filename.with_suffix('.lz4.pickle')
     log.info("[START] LZ4 of %r...", name)
     frames = [clz4.compress(frame) for frame in dataset]
     log.info("[ END ] LZ4 of %r", name)
+    log.info("[START] save %r...", filename)
+    with open(filename, 'wb') as fobj:
+        pickle.dump(frames, fobj)
+    log.info("[ END ] save %r", filename)
+
+
+def _save_dataset_bslz4(name, dest_dir, dataset):
+    filename = dest_dir / name
+    filename = filename.with_suffix('.bslz4.pickle')
+    log.info("[START] BS-LZ4 of %r...", name)
+    frames = [bitshuffle.compress_lz4(frame).tobytes() for frame in dataset]
+    log.info("[ END ] BS-LZ4 of %r", name)
     log.info("[START] save %r...", filename)
     with open(filename, 'wb') as fobj:
         pickle.dump(frames, fobj)
