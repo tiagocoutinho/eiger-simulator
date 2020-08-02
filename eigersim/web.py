@@ -8,7 +8,10 @@ import threading
 from typing import List
 
 import zmq
-import fastapi
+
+from fastapi import FastAPI, Request, Body
+from fastapi.staticfiles import StaticFiles
+from fastapi.templating import Jinja2Templates
 
 from . import config
 from .dataset import frames_iter
@@ -277,7 +280,14 @@ class Detector:
         raise NotImplementedError
 
 
-app = fastapi.FastAPI()
+app = FastAPI()
+app.mount("/static", StaticFiles(directory="static", packages=["bootstrap4"]), name="static")
+templates = Jinja2Templates('templates')
+
+
+@app.get('/')
+def index(request: Request):
+    return templates.TemplateResponse('index.html', {'request': request})
 
 
 # DETECTOR MODULE =============================================================
@@ -296,7 +306,7 @@ def detector_config(version: Version, param: str):
 
 
 @app.put('/detector/api/{version}/config/{param}')
-def detector_config_put(version: Version, param: str, body=fastapi.Body(...)) -> List[str]:
+def detector_config_put(version: Version, param: str, body=Body(...)) -> List[str]:
     app.detector.config[param]['value'] = body['value']
     return ["bit_depth_image", "count_time",
             "countrate_correction_count_cutoff",
@@ -363,7 +373,7 @@ def monitor_config(version: Version, param: str):
 
 
 @app.put('/monitor/api/{version}/config/{param}')
-def monitor_config_put(version: Version, param: str, body=fastapi.Body(...)):
+def monitor_config_put(version: Version, param: str, body=Body(...)):
     app.detector.monitor['config'][param]['value'] = body['value']
 
 
@@ -413,7 +423,7 @@ def filewriter_config(version: Version, param: str):
 
 
 @app.put('/filewriter/api/{version}/config/{param}')
-def filewriter_config_put(version: Version, param: str, body=fastapi.Body(...)):
+def filewriter_config_put(version: Version, param: str, body=Body(...)):
     app.detector.filewriter['config'][param]['value'] = body['value']
 
 
@@ -463,7 +473,7 @@ def stream_config(version: Version, param: str):
 
 
 @app.put('/stream/api/{version}/config/{param}')
-def stream_config_put(version: Version, param: str, body=fastapi.Body(...)):
+def stream_config_put(version: Version, param: str, body=Body(...)):
     app.detector.stream['config'][param]['value'] = body['value']
 
 
