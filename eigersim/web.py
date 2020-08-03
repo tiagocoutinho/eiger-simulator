@@ -281,8 +281,8 @@ class Detector:
 
 
 app = FastAPI()
-app.mount("/static", StaticFiles(directory="static", packages=["bootstrap4"]), name="static")
-templates = Jinja2Templates('templates')
+app.mount("/static", StaticFiles(directory="eigersim/static", packages=["bootstrap4"]), name="static")
+templates = Jinja2Templates('eigersim/templates')
 
 
 @app.get('/')
