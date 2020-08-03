@@ -7,8 +7,8 @@ from setuptools import setup, find_packages
 
 TESTING = any(x in sys.argv for x in ["test", "pytest"])
 
-requirements = ['fastapi', 'uvicorn', 'bootstrap4', 'pyzmq>=17', 'click',
-                'h5py', 'lz4', 'bitshuffle']
+requirements = ['fastapi', 'uvicorn', 'bootstrap4', 'aiofiles', 'jinja2',
+                'pyzmq>=17', 'click', 'h5py', 'lz4', 'bitshuffle']
 
 setup_requirements = []
 if TESTING:
