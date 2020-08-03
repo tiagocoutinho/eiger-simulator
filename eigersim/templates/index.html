@@ -1,0 +1,156 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <!-- Required meta tags -->
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+
+    <!-- Bootstrap CSS -->
+    <link rel="stylesheet" href="static/css/bootstrap.min.css">
+
+    <style>
+      .bd-placeholder-img {
+          font-size: 1.125rem;
+          text-anchor: middle;
+          -webkit-user-select: none;
+          -moz-user-select: none;
+          -ms-user-select: none;
+          user-select: none;
+      }
+      @media (min-width: 768px) {
+        .bd-placeholder-img-lg {
+          font-size: 3.5rem;
+        }
+      }
+
+      html {
+	  font-size: 14px;
+      }
+
+      @media (min-width: 768px) {
+	  html {
+	      font-size: 16px;
+	  }
+      }
+
+      .container {
+	  max-width: 960px;
+      }
+
+      .pricing-header {
+	  max-width: 700px;
+      }
+
+      .card-deck .card {
+	  min-width: 220px;
+      }
+    </style>
+    <title>Eiger simulator</title>
+  </head>
+  <body>
+
+    <div class="d-flex flex-column flex-md-row align-items-center p-3 px-md-4 mb-3 bg-white border-bottom shadow-sm">
+      <h5 class="my-0 mr-md-auto font-weight-normal">Eiger simulator</h5>
+      <nav class="my-2 my-md-0 mr-md-3">
+	<a class="btn btn-outline-secondary" href="https://www.cells.es/">(C) 2020 ALBA Synchrotron</a>
+      </nav>
+      <a class="btn btn-primary" href="https://www.gnu.org/licenses/gpl-3.0.html">GPLv3</a>
+    </div>
+
+    <div class="pricing-header px-3 py-3 pt-md-5 pb-md-4 mx-auto text-center">
+      <h1 class="display-4">Eiger simulator</h1>
+      <p class="lead">Easy to use Eiger simulator. Useful to test your software </p>
+    </div>
+
+    <div class="container">
+      <div class="card-deck mb-3 text-center">
+
+	<div class="card mb-3 shadow-sm">
+	  <div class="card-header">
+            <h4 class="my-0 font-weight-normal">Free</h4>
+	  </div>
+	  <div class="card-body">
+            <h2 class="card-title pricing-card-title">As in freedom</h2>
+            <ul class="list-unstyled mt-3 mb-4">
+              <li>This software is distributed under the GPLv3 license.</li>
+	    </ul>
+            <a class="btn btn-lg btn-block btn-primary" href="https://www.gnu.org/licenses/gpl-3.0.html">
+	      About
+	    </a>
+	  </div>
+	</div>
+
+	<div class="card mb-4 shadow-sm">
+	  <div class="card-header">
+            <h4 class="my-0 font-weight-normal">Open Source</h4>
+	  </div>
+	  <div class="card-body">
+            <h2 class="card-title pricing-card-title">Hosted github</h2>
+            <ul class="list-unstyled mt-3 mb-4">
+              <li>Source code available on-line (PRs welcome)</li>
+	    </ul>
+            <a class="btn btn-lg btn-block btn-primary" href="https://github.com/tiagocoutinho/eiger-simulator">
+	      Source code
+	    </a>
+	  </div>
+	</div>
+
+	<div class="card mb-4 shadow-sm">
+	  <div class="card-header">
+            <h4 class="my-0 font-weight-normal">API</h4>
+	  </div>
+	  <div class="card-body">
+            <h2 class="card-title pricing-card-title">RESTful</h2>
+            <ul class="list-unstyled mt-3 mb-4">
+	      <li>Instrospectable on-line API</li>
+	      <li>Follows original eiger detector API</li>
+	    </ul>
+	    <div class="mb-3">
+              <a class="btn btn-lg btn-primary" href="/docs">
+		Swagger
+	      </a>
+              <a class="btn btn-lg btn-primary" href="/redoc">
+		Redocs
+	      </a>
+	    </div>
+	  </div>
+	</div>
+
+	<div class="card mb-4 shadow-sm">
+	  <div class="card-header">
+            <h4 class="my-0 font-weight-normal">Lima</h4>
+	  </div>
+	  <div class="card-body">
+            <h2 class="card-title pricing-card-title">Companions</h2>
+            <ul class="list-unstyled mt-3 mb-4">
+	      <li>Works well with</li>
+	    </ul>
+	    <div class="mb-3">
+	      <a class="btn btn-md btn-primary" href="https://github.com/esrf-bliss/lima-camera-eiger">
+		Lima Eiger
+	      </a>
+	      <a class="btn btn-md btn-primary" href="https://github.com/tiagocoutinho/lima-toolbox">
+		Lima toolbox
+	      </a>
+	    </div>
+	  </div>
+	</div>
+
+	<div class="card mb-4 shadow-sm">
+	  <div class="card-header">
+            <h4 class="my-0 font-weight-normal">Powered by</h4>
+	  </div>
+	  <div class="card-body">
+            <h2 class="card-title pricing-card-title">Python</h2>
+            <ul class="list-unstyled">
+              <li>FastAPI, uvicorn, zmq, hdf5</li>
+            </ul>
+	    <code>pip install eiger-simulator</code>
+	  </div>
+	</div>
+      </div>
+    </div>
+    <script src="static/js/jquery-3.5.1.slim.min.js"></script>
+    <script src="static/js/bootstrap.bundle.min.js"></script>
+  </body>
+</html>
