@@ -54,5 +54,5 @@ setup(
     python_requires='>=3.7',
     extras_require=extras_requirements,
     url='https://git.cells.es/controls/eiger-simulator',
-    version='0.3.0'
+    version='0.4.0'
 )
