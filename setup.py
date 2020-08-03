@@ -47,7 +47,9 @@ setup(
     keywords='alba, dectris, eiger, simulator',
     name='eiger-simulator',
     packages=find_packages(),
-    package_data={},
+    package_data={
+        'eigersim': ['static/js/*', 'templates/*']
+    },
     setup_requires=setup_requirements,
     test_suite='tests',
     tests_require=test_requirements,
