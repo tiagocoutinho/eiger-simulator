@@ -1,5 +1,8 @@
 # Eiger simulator
 
+<img align="right" alt="Eiger 9M" width="350" src="docs/eiger_9M.png" />
+
+
 ![Pypi python versions][pypi-python-versions]
 ![Pypi version][pypi-version]
 ![Pypi status][pypi-status]
