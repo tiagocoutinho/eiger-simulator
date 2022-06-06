@@ -3,6 +3,7 @@ import json
 import queue
 import asyncio
 import logging
+import pathlib
 import threading
 
 from typing import List
@@ -282,8 +283,12 @@ class Detector:
         raise NotImplementedError
 
 
+_this_dir = pathlib.Path(__file__).parent
+static_dir = _this_dir / "static"
+
+
 app = FastAPI()
-app.mount("/static", StaticFiles(directory="eigersim/static", packages=["bootstrap4"]), name="static")
+app.mount("/static", StaticFiles(directory=static_dir, packages=["bootstrap4"]), name="static")
 templates = Jinja2Templates('eigersim/templates')
 
 
