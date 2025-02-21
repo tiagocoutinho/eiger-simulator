@@ -8,7 +8,7 @@ c_char_p = ctypes.POINTER(ctypes.c_char)
 
 def _load_lib(name='lz4'):
     lz4_name = ctypes.util.find_library(name)
-    if not name:
+    if not lz4_name:
         raise ValueError(f'Cannot find {name}')
     lib = ctypes.CDLL(lz4_name)
     lib.LZ4_compress_default.argtypes = [c_char_p, c_char_p, c_int, c_int]
